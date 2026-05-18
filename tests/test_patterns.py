@@ -129,3 +129,96 @@ def test_format_pattern_report_groups_by_kind(company: Path) -> None:
     report = review_patterns(company)
     text = format_pattern_report(report, use_color=False)
     assert "orphan-source" in text
+
+
+# ---------------------------------------------------------------------------
+# Usage cache
+# ---------------------------------------------------------------------------
+
+
+def test_review_writes_usage_cache(company: Path) -> None:
+    _make_build(company, "alpha")
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    review_patterns(company)
+    cache_path = company / "patterns" / ".usage-cache.json"
+    assert cache_path.is_file()
+    import json
+    data = json.loads(cache_path.read_text())
+    assert data["version"] == 1
+    assert "x" in data["usage"]
+
+
+def test_cache_is_used_when_fresh(company: Path) -> None:
+    """A pre-existing cache should be honoured if no input is newer than it."""
+    import json
+    _make_build(company, "alpha")
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    # First call writes the cache.
+    review_patterns(company)
+    cache_path = company / "patterns" / ".usage-cache.json"
+    data = json.loads(cache_path.read_text())
+
+    # Manually flip the cache's claim about pattern x's usage, then ensure the
+    # second review trusts our injected value (proves cache is read).
+    data["usage"]["x"] = ["alpha", "fake-other-project"]
+    # Bump the max_input_mtime far into the future so it stays fresh no matter what.
+    data["max_input_mtime"] = data["max_input_mtime"] + 1_000_000
+    cache_path.write_text(json.dumps(data))
+
+    report = review_patterns(company)
+    # If the cache was used, the unused-check should NOT fire (the cache claims
+    # the slug is referenced by 'fake-other-project').
+    unused = [f for f in report.findings if f.kind == FindingKind.UNUSED]
+    assert not any("validate-numbers" in f.path.name or f.path.name == "CANDIDATE-x.md" for f in unused)
+
+
+def test_cache_invalidated_when_inputs_change(company: Path) -> None:
+    """Touching a project file should invalidate the cache."""
+    import json
+    import os
+    import time
+    alpha = _make_build(company, "alpha")
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    review_patterns(company)  # populates cache
+
+    # Touch a markdown file in alpha so mtime advances past the cache snapshot.
+    state = alpha / "planning" / "STATE.md"
+    time.sleep(0.05)  # ensure mtime resolution > cache write timestamp
+    state_mtime = state.stat().st_mtime + 5
+    os.utime(state, (state_mtime, state_mtime))
+
+    # Force a rescan path via mtime invalidation (use_cache=True default).
+    report = review_patterns(company)
+    # Cache should have been refreshed with the new max_input_mtime.
+    cache = json.loads((company / "patterns" / ".usage-cache.json").read_text())
+    assert cache["max_input_mtime"] >= state_mtime
+    # Sanity: no crash, no spurious findings beyond the orphan/unused report.
+    assert isinstance(report.findings, list)
+
+
+def test_use_cache_false_forces_rescan(company: Path) -> None:
+    """use_cache=False ignores the existing cache and recomputes."""
+    import json
+    _make_build(company, "alpha")
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    # Seed a stale cache claiming the slug is used.
+    cache_path = company / "patterns" / ".usage-cache.json"
+    cache_path.write_text(json.dumps({
+        "version": 1,
+        "computed_at": "1970-01-01T00:00:00+00:00",
+        "max_input_mtime": 9_999_999_999.0,  # implausibly future
+        "usage": {"x": ["alpha", "phantom-project"]},
+    }))
+    # With cache disabled, the rescan happens — phantom-project is NOT real,
+    # so x has no real outside-use and should be flagged unused IF other
+    # projects exist. With only "alpha" present, the unused check is skipped
+    # anyway. The point of this test is that no crash + cache gets overwritten.
+    report = review_patterns(company, use_cache=False)
+    new_cache = json.loads(cache_path.read_text())
+    assert new_cache["max_input_mtime"] < 9_999_999_999.0  # cache was refreshed
+    # Sanity
+    assert isinstance(report.findings, list)

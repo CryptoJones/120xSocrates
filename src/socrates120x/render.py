@@ -218,9 +218,13 @@ def _decisions_md(ctx: dict[str, Any]) -> str:
     decisions = _g(ctx, "decisions", [])
     oos = _g(ctx, "out_of_scope", [])
     tech = _g(ctx, "tech_stack", "TBD")
+    today = ctx["today"]
 
+    # Each decision is stamped with the date it was captured. The trailing
+    # `(YYYY-MM-DD)` is the convention `socrates timeline` reads to surface
+    # decisions chronologically.
     decision_block = (
-        "\n".join(f"- **{item}**" for item in decisions) if decisions else
+        "\n".join(f"- **{item} ({today})**" for item in decisions) if decisions else
         "_(no durable decisions captured yet)_"
     )
     return f"""# DECISIONS — the house rules
@@ -241,10 +245,10 @@ Durable choices future builders must respect. New decisions are appended; old on
 
 ## How to add a decision
 
-When something gets decided in conversation, write it here in the same format:
+When something gets decided in conversation, append it to the list above in the same format. **Always include the date** — `socrates timeline` reads the trailing `(YYYY-MM-DD)` to surface decisions chronologically:
 
 ```
-- **<choice> — because <reason>**
+- **<choice> — because <reason> (YYYY-MM-DD)**
 ```
 
 If the decision is reversed, do not delete the line. Strike it through with `~~...~~` and add the new decision below with the date.

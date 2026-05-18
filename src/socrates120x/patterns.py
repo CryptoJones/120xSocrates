@@ -4,11 +4,20 @@ Patterns rot. Candidates that never get promoted, candidates whose source
 project has been deleted, candidates that nobody has ever re-used — all of
 those are signals that the compounding promise is not landing. This module
 surfaces them so the operator can act.
+
+The naive "is this slug used in any other project?" check is an rgrep across
+every markdown file in every build. For a CompanyOS with 200 projects that
+gets expensive. We cache the grep result at `patterns/.usage-cache.json`
+and invalidate via mtime: if no input file has changed since the cache was
+written, the cached usage map is reused. Pass ``use_cache=False`` to force
+a full rescan.
 """
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -16,6 +25,8 @@ from enum import Enum
 from pathlib import Path
 
 STALE_CANDIDATE_DAYS = 90
+USAGE_CACHE_FILENAME = ".usage-cache.json"
+USAGE_CACHE_VERSION = 1
 
 
 class FindingKind(Enum):
@@ -39,8 +50,14 @@ class PatternReport:
     promoted_total: int
 
 
-def review_patterns(companyos_root: Path) -> PatternReport:
-    """Inspect *companyos_root*/patterns/ and report drift."""
+def review_patterns(companyos_root: Path, *, use_cache: bool = True) -> PatternReport:
+    """Inspect *companyos_root*/patterns/ and report drift.
+
+    ``use_cache=True`` (the default) reads ``patterns/.usage-cache.json`` if
+    fresh (no input file mtime exceeds the cache snapshot) and uses its
+    pre-computed usage map. ``use_cache=False`` forces a full rescan; the
+    cache is still written.
+    """
     patterns_dir = companyos_root / "patterns"
     findings: list[PatternFinding] = []
     candidates = 0
@@ -50,17 +67,25 @@ def review_patterns(companyos_root: Path) -> PatternReport:
         return PatternReport(patterns_dir, findings, 0, 0)
 
     builds_dir = companyos_root / "builds"
-    # Distinguish "no builds folder" (skip cross-project checks entirely) from
-    # "builds folder exists but is empty" (orphan check still meaningful).
     if builds_dir.is_dir():
         build_names: set[str] | None = {p.name for p in builds_dir.iterdir() if p.is_dir()}
     else:
         build_names = None
 
+    pattern_files = sorted(p for p in patterns_dir.glob("*.md") if p.name != "README.md")
+
+    # Try to use the cached usage map.
+    usage_map: dict[str, list[str]] | None = None
+    if use_cache:
+        usage_map = _load_usage_cache(patterns_dir, builds_dir)
+
+    if usage_map is None:
+        # Recompute from scratch and persist.
+        usage_map = _compute_usage_map(pattern_files, builds_dir, build_names)
+        _save_usage_cache(patterns_dir, builds_dir, usage_map)
+
     today = _dt.date.today()
-    for pattern in sorted(patterns_dir.glob("*.md")):
-        if pattern.name == "README.md":
-            continue
+    for pattern in pattern_files:
         is_candidate = pattern.name.startswith("CANDIDATE-")
         if is_candidate:
             candidates += 1
@@ -94,26 +119,127 @@ def review_patterns(companyos_root: Path) -> PatternReport:
                 ),
             ))
 
-        # Unused check: pattern slug appears in NO other build folder. Only
-        # meaningful when there is at least one project other than the source
-        # to check against — single-project workspaces can't yet compound.
+        # Unused check via the (possibly cached) usage_map.
         if build_names and len(build_names - {source} if source else build_names) > 0:
             slug = _pattern_slug(pattern.name)
-            if slug and not _slug_used_outside_source(slug, source, builds_dir, build_names):
-                findings.append(PatternFinding(
-                    kind=FindingKind.UNUSED,
-                    path=pattern,
-                    message=(
-                        f"slug '{slug}' is not referenced in any project outside "
-                        f"its source — pattern has not yet compounded"
-                    ),
-                ))
+            if slug:
+                used_in = usage_map.get(slug, [])
+                # Exclude the source project from the use list.
+                used_outside = [p for p in used_in if p != source]
+                if not used_outside:
+                    findings.append(PatternFinding(
+                        kind=FindingKind.UNUSED,
+                        path=pattern,
+                        message=(
+                            f"slug '{slug}' is not referenced in any project outside "
+                            f"its source — pattern has not yet compounded"
+                        ),
+                    ))
     return PatternReport(
         patterns_dir=patterns_dir,
         findings=findings,
         candidates_total=candidates,
         promoted_total=promoted,
     )
+
+
+# ---------------------------------------------------------------------------
+# Usage cache
+# ---------------------------------------------------------------------------
+
+
+def _compute_usage_map(
+    pattern_files: list[Path],
+    builds_dir: Path,
+    build_names: set[str] | None,
+) -> dict[str, list[str]]:
+    """Grep every build for every pattern slug; return slug -> [project, ...]."""
+    if not build_names:
+        return {}
+    result: dict[str, list[str]] = {}
+    for pattern in pattern_files:
+        slug = _pattern_slug(pattern.name)
+        if not slug:
+            continue
+        result[slug] = _projects_mentioning(slug, builds_dir, build_names)
+    return result
+
+
+def _projects_mentioning(slug: str, builds_dir: Path, build_names: set[str]) -> list[str]:
+    needle = slug.lower()
+    hits: list[str] = []
+    for name in sorted(build_names):
+        project = builds_dir / name
+        for f in project.rglob("*.md"):
+            try:
+                text = f.read_text(errors="replace").lower()
+            except OSError:
+                continue
+            if needle in text:
+                hits.append(name)
+                break
+    return hits
+
+
+def _load_usage_cache(patterns_dir: Path, builds_dir: Path) -> dict[str, list[str]] | None:
+    cache_path = patterns_dir / USAGE_CACHE_FILENAME
+    if not cache_path.is_file():
+        return None
+    try:
+        data = json.loads(cache_path.read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    if data.get("version") != USAGE_CACHE_VERSION:
+        return None
+    cached_mtime = data.get("max_input_mtime")
+    if not isinstance(cached_mtime, (int, float)):
+        return None
+    current_mtime = _max_input_mtime(patterns_dir, builds_dir)
+    if current_mtime > cached_mtime:
+        return None  # cache stale
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    # Coerce values to list[str] defensively.
+    out: dict[str, list[str]] = {}
+    for slug, names in usage.items():
+        if isinstance(names, list):
+            out[str(slug)] = [str(n) for n in names if isinstance(n, str)]
+    return out
+
+
+def _save_usage_cache(
+    patterns_dir: Path,
+    builds_dir: Path,
+    usage_map: dict[str, list[str]],
+) -> None:
+    payload = {
+        "version": USAGE_CACHE_VERSION,
+        "computed_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        "max_input_mtime": _max_input_mtime(patterns_dir, builds_dir),
+        "usage": usage_map,
+    }
+    with contextlib.suppress(OSError):
+        (patterns_dir / USAGE_CACHE_FILENAME).write_text(json.dumps(payload, indent=2))
+
+
+def _max_input_mtime(patterns_dir: Path, builds_dir: Path) -> float:
+    """Largest mtime across every input that could affect the usage map."""
+    max_mtime = 0.0
+    for p in patterns_dir.glob("*.md"):
+        try:
+            max_mtime = max(max_mtime, p.stat().st_mtime)
+        except OSError:
+            continue
+    if builds_dir.is_dir():
+        for p in builds_dir.rglob("*.md"):
+            try:
+                max_mtime = max(max_mtime, p.stat().st_mtime)
+            except OSError:
+                continue
+    return max_mtime
 
 
 def format_pattern_report(report: PatternReport, *, use_color: bool | None = None) -> str:
@@ -179,23 +305,3 @@ def _pattern_slug(filename: str) -> str:
     return name.strip()
 
 
-def _slug_used_outside_source(
-    slug: str,
-    source: str | None,
-    builds_dir: Path,
-    build_names: set[str],
-) -> bool:
-    """True if *slug* appears in any builds/<other>/ folder, not just the source one."""
-    needle = slug.lower()
-    for name in build_names:
-        if source and name == source:
-            continue
-        project = builds_dir / name
-        for f in project.rglob("*.md"):
-            try:
-                text = f.read_text(errors="replace").lower()
-            except OSError:
-                continue
-            if needle in text:
-                return True
-    return False

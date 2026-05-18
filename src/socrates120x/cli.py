@@ -123,6 +123,22 @@ def main(argv: list[str] | None = None) -> int:
         "--stdout", action="store_true",
         help="Print to stdout instead of writing .socrates-architect-pack.md.",
     )
+    pack.add_argument(
+        "--include-philosophy", action="store_true",
+        help=(
+            "Prepend a short, original 120x stance written by socrates. "
+            "Useful when the Architect chat is fresh and needs the "
+            "Architect/Builder split explained inline."
+        ),
+    )
+    pack.add_argument(
+        "--kit-path", type=Path, default=None,
+        help=(
+            "Path to a local 120x Operators Kit checkout. Its three load-bearing "
+            "files (philosophy, scaffold-instructions, quickstart) will be "
+            "embedded in the pack. Falls back to the $SOCRATES_KIT_PATH env var."
+        ),
+    )
 
     patterns = sub.add_parser(
         "patterns",
@@ -143,6 +159,13 @@ def main(argv: list[str] | None = None) -> int:
     patterns_review.add_argument(
         "path", nargs="?", type=Path, default=Path.cwd(),
         help="CompanyOS root. Default: cwd.",
+    )
+    patterns_review.add_argument(
+        "--no-cache", action="store_true",
+        help=(
+            "Force a full rescan instead of using patterns/.usage-cache.json. "
+            "The cache is still written; this just ignores it for one run."
+        ),
     )
 
     status = sub.add_parser(
@@ -432,10 +455,15 @@ def _cmd_pack(args: argparse.Namespace) -> int:
     if not project.is_dir():
         print(f"error: {project} is not a directory", file=sys.stderr)
         return 2
+    kwargs = {
+        "include_sprint": args.sprint,
+        "include_philosophy": args.include_philosophy,
+        "kit_path": args.kit_path,
+    }
     if args.stdout:
-        print(build_pack(project, include_sprint=args.sprint))
+        print(build_pack(project, **kwargs))
         return 0
-    target = write_pack(project, include_sprint=args.sprint)
+    target = write_pack(project, **kwargs)
     print(f"Wrote {target}")
     return 0
 
@@ -449,7 +477,7 @@ def _cmd_patterns(args: argparse.Namespace) -> int:
     if not root.is_dir():
         print(f"error: {root} is not a directory", file=sys.stderr)
         return 2
-    report = review_patterns(root)
+    report = review_patterns(root, use_cache=not args.no_cache)
     print(format_pattern_report(report))
     return 1 if report.findings else 0
 

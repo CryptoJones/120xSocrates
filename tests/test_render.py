@@ -97,6 +97,19 @@ def test_render_handles_empty_optional_lists(tmp_path: Path) -> None:
     assert "[]" not in domain
 
 
+def test_decisions_md_stamps_each_decision_with_today(tmp_path: Path) -> None:
+    """Rendered decisions get a trailing (YYYY-MM-DD) so timeline can find them."""
+    import datetime as _dt
+    target = tmp_path / "demo"
+    scaffold(target)
+    render_all(target, _sample_answers())
+    body = (target / "planning" / "DECISIONS.md").read_text()
+    today = _dt.date.today().isoformat()
+    # Both seeded decisions should carry today's stamp.
+    assert f"Supabase over self-hosted Postgres — client already has an account ({today})" in body
+    assert f"File-drop ingestion — vendors will not expose an API ({today})" in body
+
+
 def test_sprint1_handoff_includes_sprint_folder_placeholder(tmp_path: Path) -> None:
     target = tmp_path / "demo"
     scaffold(target)

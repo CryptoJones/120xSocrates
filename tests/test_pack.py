@@ -83,3 +83,57 @@ def test_pack_starts_with_architect_header(project: Path) -> None:
     text = build_pack(project)
     assert text.startswith("# Architect input bundle")
     assert "Paste this entire file" in text
+
+
+def test_pack_include_philosophy_embeds_socrates_preamble(project: Path) -> None:
+    text = build_pack(project, include_philosophy=True)
+    assert "120x Architect / Builder stance" in text
+    # Should NOT contain kit-file section headers unless --kit-path was passed.
+    assert "# 120x Operators Kit:" not in text
+
+
+def test_pack_default_omits_philosophy(project: Path) -> None:
+    text = build_pack(project)
+    assert "120x Architect / Builder stance" not in text
+
+
+def test_pack_kit_path_embeds_kit_files(project: Path, tmp_path: Path) -> None:
+    kit = tmp_path / "fake-kit"
+    kit.mkdir()
+    (kit / "120x-architect-builder-philosophy.md").write_text(
+        "# Fake philosophy doc body content."
+    )
+    (kit / "120x-project-scaffold-instructions.md").write_text(
+        "# Fake scaffold instructions content."
+    )
+    # Quickstart deliberately absent — pack should skip cleanly.
+    text = build_pack(project, kit_path=kit)
+    assert "120x-architect-builder-philosophy.md" in text
+    assert "Fake philosophy doc body" in text
+    assert "120x-project-scaffold-instructions.md" in text
+    assert "120x-quickstart.md" not in text
+
+
+def test_pack_kit_path_via_env_var(project: Path, tmp_path: Path, monkeypatch) -> None:
+    kit = tmp_path / "env-kit"
+    kit.mkdir()
+    (kit / "120x-quickstart.md").write_text("# Quickstart from env\n")
+    monkeypatch.setenv("SOCRATES_KIT_PATH", str(kit))
+    text = build_pack(project)
+    assert "Quickstart from env" in text
+
+
+def test_pack_kit_path_missing_dir_skipped(project: Path) -> None:
+    # Non-existent path should be silently skipped (no crash).
+    text = build_pack(project, kit_path=Path("/tmp/does-not-exist-socrates"))
+    # No kit section header should appear.
+    assert "# 120x Operators Kit:" not in text
+
+
+def test_pack_philosophy_and_kit_can_combine(project: Path, tmp_path: Path) -> None:
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    (kit / "120x-architect-builder-philosophy.md").write_text("# Kit philosophy.\n")
+    text = build_pack(project, include_philosophy=True, kit_path=kit)
+    assert "120x Architect / Builder stance" in text  # socrates preamble
+    assert "Kit philosophy" in text  # kit file
