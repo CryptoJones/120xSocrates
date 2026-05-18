@@ -123,7 +123,6 @@ def run_extract(
     answers_path = project / ".socrates-extract-answers.json"
     iv = Interview(
         answers_path=answers_path,
-        project_name=project.name,
         resume=resume,
         editor=editor,
         questions=PATTERN_QUESTIONS,

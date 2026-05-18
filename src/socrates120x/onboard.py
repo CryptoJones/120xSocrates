@@ -3,19 +3,79 @@
 No interview, no LLM. Pure file-reading + reformatting. The point is to give
 a new collaborator (human or agent) the load-bearing facts in one minute,
 without making them read 7 files.
+
+Source selection:
+
+1. If `.socrates-answers.json` exists in the project, use it as the primary
+   source — it is structured and not subject to markdown-parse drift.
+2. Otherwise, fall back to regex parsing of the rendered planning files.
 """
 
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import re
 from pathlib import Path
+from typing import Any
 
 MAX_BULLETS = 3
 
 
 def synthesize_welcome(project: Path) -> str:
     """Read the planning files at *project* and return a WELCOME.md body."""
+    answers = _load_answers_json(project)
+    if answers is not None:
+        return _synthesize_from_answers(project, answers)
+    return _synthesize_from_markdown(project)
+
+
+def _load_answers_json(project: Path) -> dict[str, Any] | None:
+    path = project / ".socrates-answers.json"
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text())
+        if isinstance(data, dict):
+            return data
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _synthesize_from_answers(project: Path, answers: dict[str, Any]) -> str:
+    """Build WELCOME.md directly from the structured answer dict."""
+    today = _dt.date.today().isoformat()
+    name = answers.get("project_name") or project.name
+    tagline = answers.get("tagline") or ""
+    client = answers.get("client") or ""
+    tech = answers.get("tech_stack") or ""
+    status = answers.get("state_current") or "_(no current status)_"
+    next_action = answers.get("state_next") or "_(no next action)_"
+
+    decisions_list = answers.get("decisions") or []
+    out_of_scope = answers.get("out_of_scope") or []
+    risks_list = answers.get("risks") or []
+    open_questions = answers.get("open_questions") or []
+
+    top_decisions = [str(d) for d in decisions_list[:MAX_BULLETS]]
+    top_out_of_scope = [str(o) for o in out_of_scope[:MAX_BULLETS]]
+    top_risks = [str(r) for r in risks_list[:MAX_BULLETS]]
+    top_questions = [str(q) for q in open_questions[:MAX_BULLETS]]
+
+    current_sprint = "**001 — Discovery & Architecture**"  # init-rendered projects start here
+    active_sprint_path = _active_sprint_path(project)
+    return _format_welcome(
+        name=name, today=today, tagline=tagline, client=client, tech=tech,
+        current_sprint=current_sprint, status=status, next_action=next_action,
+        top_decisions=top_decisions, out_of_scope=top_out_of_scope,
+        top_risks=top_risks, top_questions=top_questions,
+        active_sprint_path=active_sprint_path,
+    )
+
+
+def _synthesize_from_markdown(project: Path) -> str:
+    """Fallback: parse the rendered markdown files (used when no answers.json)."""
     today = _dt.date.today().isoformat()
     name = project.name
 
@@ -40,6 +100,31 @@ def synthesize_welcome(project: Path) -> str:
     top_questions = _top_bullets(questions, "Open", MAX_BULLETS)
 
     active_sprint_path = _active_sprint_path(project)
+    return _format_welcome(
+        name=name, today=today, tagline=tagline, client=client, tech=tech,
+        current_sprint=current_sprint, status=status, next_action=next_action,
+        top_decisions=top_decisions, out_of_scope=out_of_scope,
+        top_risks=top_risks, top_questions=top_questions,
+        active_sprint_path=active_sprint_path,
+    )
+
+
+def _format_welcome(
+    *,
+    name: str,
+    today: str,
+    tagline: str,
+    client: str,
+    tech: str,
+    current_sprint: str,
+    status: str,
+    next_action: str,
+    top_decisions: list[str],
+    out_of_scope: list[str],
+    top_risks: list[str],
+    top_questions: list[str],
+    active_sprint_path: Path | None,
+) -> str:
 
     return f"""# WELCOME — {name}
 

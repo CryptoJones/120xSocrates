@@ -1,40 +1,37 @@
-"""The interview — questions and the runner that asks them."""
+"""The Socratic interview — the canonical init question set and runner.
+
+The prompting primitives moved to `prompting.py`; this module owns:
+
+- `QUESTIONS`: the 18 questions used by `socrates init`.
+- `Interview`: the resumable runner that loops over a question set, saves
+  answers incrementally, and calls into `prompting` for I/O.
+
+Reusing this class with a different `questions` tuple drives `extract`.
+"""
 
 from __future__ import annotations
 
-import contextlib
 import json
-import os
-import shutil
-import subprocess
-import sys
-import tempfile
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-QuestionType = Literal["line", "multiline", "list"]
+from socrates120x.prompting import (
+    InputFn,
+    OutputFn,
+    Question,
+    ask,
+    confirm_change,
+    is_interactive,
+    print_section_banner,
+    show_existing,
+)
 
-InputFn = Callable[[str], str]
-OutputFn = Callable[[str], None]
-
-
-@dataclass(frozen=True)
-class Question:
-    """One Socratic question."""
-
-    key: str
-    prompt: str
-    section: str
-    help: str = ""
-    type: QuestionType = "line"
-    required: bool = False
-    default: str = ""
+__all__ = ["Interview", "Question", "QUESTIONS", "is_interactive"]
 
 
-# The full interview. Order matters — earlier answers prime the user for later
-# ones (decisions before risks, risks before open questions, etc.).
+# The full init interview. Order matters — earlier answers prime the user for
+# later ones (decisions before risks, risks before open questions, etc.).
 QUESTIONS: tuple[Question, ...] = (
     # --- Project identity -------------------------------------------------
     Question(
@@ -181,10 +178,15 @@ QUESTIONS: tuple[Question, ...] = (
 
 @dataclass
 class Interview:
-    """Stateful interview against an on-disk answer file."""
+    """Stateful interview against an on-disk answer file.
+
+    `project_name` is optional. Callers that want the answer dict to carry a
+    `project_name` key (init flow) should pass it; callers that do not
+    (extract flow) should leave it empty.
+    """
 
     answers_path: Path
-    project_name: str
+    project_name: str = ""
     answers: dict[str, Any] = field(default_factory=dict)
     resume: bool = False
     editor: bool = False
@@ -204,193 +206,25 @@ class Interview:
         output_fn: OutputFn = print,
     ) -> None:
         self.load()
-        self.answers.setdefault("project_name", self.project_name)
+        if self.project_name:
+            self.answers.setdefault("project_name", self.project_name)
         total = len(self.questions)
         current_section: str | None = None
         for i, q in enumerate(self.questions, start=1):
             if q.section != current_section:
-                _print_section_banner(q.section, output_fn)
+                print_section_banner(q.section, output_fn)
                 current_section = q.section
 
             existing = self.answers.get(q.key)
             if self.resume and existing not in (None, "", []):
                 output_fn(f"[{i}/{total}] {q.prompt}")
-                _show_existing(existing, output_fn)
-                if not _confirm_change(input_fn, output_fn):
+                show_existing(existing, output_fn)
+                if not confirm_change(input_fn, output_fn):
                     continue
 
-            value = _ask(q, i, total, input_fn, output_fn, editor=self.editor)
+            value = ask(q, i, total, input_fn, output_fn, editor=self.editor)
             self.answers[q.key] = value
             self.save()
 
         output_fn("")
         output_fn("Interview complete. Saved to: " + str(self.answers_path))
-
-
-# ---------------------------------------------------------------------------
-# Internals — prompting primitives
-# ---------------------------------------------------------------------------
-
-
-def _print_section_banner(section: str, output_fn: OutputFn) -> None:
-    output_fn("")
-    output_fn(f"━━━ {section} ━━━")
-
-
-def _show_existing(value: Any, output_fn: OutputFn) -> None:
-    if isinstance(value, list):
-        output_fn("  (already answered:)")
-        for item in value:
-            output_fn(f"    - {item}")
-    else:
-        output_fn(f"  (already answered: {value!r})")
-
-
-def _confirm_change(input_fn: InputFn, output_fn: OutputFn) -> bool:
-    try:
-        reply = input_fn("  Re-answer? [y/N] ").strip().lower()
-    except EOFError:
-        return False
-    return reply in ("y", "yes")
-
-
-def _ask(
-    q: Question,
-    i: int,
-    total: int,
-    input_fn: InputFn,
-    output_fn: OutputFn,
-    *,
-    editor: bool = False,
-) -> Any:
-    output_fn("")
-    output_fn(f"[{i}/{total}] {q.prompt}")
-    if q.help:
-        for line in q.help.splitlines():
-            output_fn(f"   • {line}")
-    if q.default:
-        output_fn(f"   (default: {q.default})")
-
-    if q.type == "list":
-        return _ask_list(input_fn, output_fn, q)
-    if q.type == "multiline":
-        if editor:
-            return _ask_multiline_editor(output_fn, q)
-        return _ask_multiline(input_fn, output_fn, q)
-    return _ask_line(input_fn, output_fn, q)
-
-
-def _ask_line(input_fn: InputFn, output_fn: OutputFn, q: Question) -> str:
-    suffix = f" [default: {q.default!r}]" if q.default else ""
-    while True:
-        try:
-            raw = input_fn(f"   ›{suffix} ").strip()
-        except EOFError:
-            raw = ""
-        if not raw and q.default:
-            return q.default
-        if not raw and q.required:
-            output_fn("   (this one is required — please answer)")
-            continue
-        return raw
-
-
-def _ask_multiline(input_fn: InputFn, output_fn: OutputFn, q: Question) -> str:
-    output_fn("   (multi-line — finish with a single '.' on its own line)")
-    lines: list[str] = []
-    while True:
-        prompt = "   …  " if lines else "   ›  "
-        try:
-            line = input_fn(prompt)
-        except EOFError:
-            break
-        if line.strip() == ".":
-            break
-        lines.append(line)
-    text = "\n".join(lines).rstrip()
-    if not text and q.default:
-        output_fn("   (using default)")
-        return q.default
-    if not text and q.required:
-        output_fn("   (this one is required — try again)")
-        return _ask_multiline(input_fn, output_fn, q)
-    return text
-
-
-def _ask_multiline_editor(output_fn: OutputFn, q: Question) -> str:
-    """Open $EDITOR with a tempfile, return the (comment-stripped) body."""
-    editor = _editor_command()
-    if not editor:
-        output_fn("   (no $EDITOR set and no fallback found — falling back to inline prompt)")
-        return _ask_multiline(input, output_fn, q)
-
-    header = f"""# {q.prompt}
-# Lines starting with '#' are ignored. Save & quit to submit your answer.
-# An empty file (or a file with only comments) accepts the default if one
-# exists, or re-prompts otherwise.
-"""
-    if q.default:
-        header += f"# Default: {q.default}\n"
-    header += "#\n"
-
-    with tempfile.NamedTemporaryFile(
-        mode="w+",
-        prefix=f"socrates-{q.key}-",
-        suffix=".md",
-        delete=False,
-    ) as tf:
-        tf.write(header)
-        tmp_path = Path(tf.name)
-
-    try:
-        output_fn(f"   (opening {editor[0]} — save & quit to submit)")
-        subprocess.run([*editor, str(tmp_path)], check=True)
-        raw = tmp_path.read_text()
-    finally:
-        with contextlib.suppress(OSError):
-            tmp_path.unlink()
-
-    body = "\n".join(
-        line for line in raw.splitlines() if not line.lstrip().startswith("#")
-    ).strip()
-
-    if not body and q.default:
-        output_fn("   (empty — using default)")
-        return q.default
-    if not body and q.required:
-        output_fn("   (this one is required — re-opening editor)")
-        return _ask_multiline_editor(output_fn, q)
-    return body
-
-
-def _ask_list(input_fn: InputFn, output_fn: OutputFn, q: Question) -> list[str]:
-    output_fn("   (one item per line — empty line to finish list)")
-    items: list[str] = []
-    while True:
-        try:
-            line = input_fn(f"   {len(items) + 1:>2}.  ").strip()
-        except EOFError:
-            break
-        if not line:
-            break
-        items.append(line)
-        output_fn(f"        ✓ ({len(items)} so far)")
-    if items:
-        output_fn(f"   ↳ captured {len(items)} item{'s' if len(items) != 1 else ''}")
-    return items
-
-
-def _editor_command() -> list[str] | None:
-    """Resolve the editor to invoke. Honour $VISUAL / $EDITOR, else fall back."""
-    for env_var in ("VISUAL", "EDITOR"):
-        cmd = os.environ.get(env_var)
-        if cmd:
-            return cmd.split()
-    for candidate in ("nano", "vim", "vi"):
-        if shutil.which(candidate):
-            return [candidate]
-    return None
-
-
-def is_interactive() -> bool:
-    return sys.stdin.isatty()

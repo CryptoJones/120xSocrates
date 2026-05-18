@@ -8,12 +8,15 @@ emit an INFO finding (advisory), not a WARNING or ERROR.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
 from socrates120x.audit.model import Finding, Severity
 from socrates120x.scaffold import FILES
+
+CONFIG_FILE = ".socrates-audit.json"
 
 # Files that should always exist in a populated project. Subset of scaffold
 # FILES — we exclude README stubs inside src/, tests/, etc. which are
@@ -93,24 +96,58 @@ class RequiredFilesCheck(Check):
 
 
 class ScaffoldShapeCheck(Check):
-    """The full scaffold tree should be present (warning, not error — partial scaffolds happen)."""
+    """The full scaffold tree is *expected* but pruning is legitimate.
+
+    Severity is INFO because operators routinely drop files that aren't relevant
+    (e.g. `docs/API.md` on a non-API project). Per-project skip lists live in
+    `.socrates-audit.json`:
+
+        {"scaffold_shape": {"ignore": ["docs/API.md", "docs/PERMISSIONS.md"]}}
+    """
 
     name = "scaffold-shape"
 
     def run(self, project: Path) -> list[Finding]:
+        ignored = _load_ignore_list(project, "scaffold_shape")
         findings: list[Finding] = []
         for rel in FILES:
             if rel in REQUIRED_PLANNING_FILES:
                 continue  # already covered by RequiredFilesCheck
+            if rel in ignored:
+                continue
             path = project / rel
             if not path.exists():
                 findings.append(Finding(
                     check=self.name,
-                    severity=Severity.WARNING,
-                    message=f"scaffold file missing (operator may have intentionally pruned it): {rel}",
+                    severity=Severity.INFO,
+                    message=(
+                        f"scaffold file '{rel}' missing — pruning is allowed, "
+                        f"but add it to .socrates-audit.json under "
+                        f"['scaffold_shape']['ignore'] to silence this notice"
+                    ),
                     path=path,
                 ))
         return findings
+
+
+def _load_ignore_list(project: Path, section: str) -> set[str]:
+    """Load `[section]['ignore']` from `.socrates-audit.json` if present."""
+    config_path = project / CONFIG_FILE
+    if not config_path.is_file():
+        return set()
+    try:
+        data = json.loads(config_path.read_text())
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    sec = data.get(section)
+    if not isinstance(sec, dict):
+        return set()
+    ignore = sec.get("ignore")
+    if not isinstance(ignore, list):
+        return set()
+    return {str(x) for x in ignore}
 
 
 class SprintFolderCheck(Check):

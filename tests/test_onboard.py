@@ -121,6 +121,36 @@ def test_top_bullets_extracts_first_n() -> None:
     assert bullets == ["first risk", "second risk"]
 
 
+def test_welcome_prefers_answers_json_when_present(clean_project: Path) -> None:
+    """If .socrates-answers.json exists, the synthesis should use it directly.
+
+    Verified by writing an answers file that contradicts the rendered markdown:
+    the WELCOME should reflect the JSON, not the markdown.
+    """
+    import json
+    answers = _clean_answers()
+    answers["client"] = "JsonOnlyCo"
+    answers["decisions"] = ["JSON-only decision A — proof", "JSON-only decision B — proof"]
+    (clean_project / ".socrates-answers.json").write_text(json.dumps(answers))
+
+    body = synthesize_welcome(clean_project)
+    assert "JsonOnlyCo" in body
+    assert "JSON-only decision A" in body
+    # The markdown DECISIONS.md still has 'Supabase over self-hosted' — but
+    # the JSON wins, so that string should NOT appear.
+    assert "Supabase over self-hosted" not in body
+
+
+def test_welcome_falls_back_to_markdown_when_no_json(clean_project: Path) -> None:
+    """When .socrates-answers.json is absent, fall through to regex parsing."""
+    answers_path = clean_project / ".socrates-answers.json"
+    if answers_path.exists():
+        answers_path.unlink()
+    body = synthesize_welcome(clean_project)
+    # Markdown-parsed path: should still pick up the rendered DECISIONS.md content.
+    assert "Supabase over self-hosted" in body
+
+
 def test_top_bullets_skips_placeholder_lines() -> None:
     text = """## Risks
 

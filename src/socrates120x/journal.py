@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from socrates120x.interview import _editor_command
+from socrates120x.prompting import editor_command
 
 
 def create_or_open_entry(project: Path, *, show: bool = False, list_all: bool = False) -> int:
@@ -35,7 +35,7 @@ def create_or_open_entry(project: Path, *, show: bool = False, list_all: bool = 
         entry.write_text(_template(today))
         print(f"Created {entry}")
 
-    cmd = _editor_command()
+    cmd = editor_command()
     if cmd is None:
         if is_new:
             print("(no $EDITOR / $VISUAL set and no fallback — entry created but not opened)")

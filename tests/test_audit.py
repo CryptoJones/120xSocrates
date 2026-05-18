@@ -103,11 +103,27 @@ def test_required_files_check_fires_on_missing(clean_project: Path) -> None:
     assert all(f.severity is Severity.ERROR for f in findings)
 
 
-def test_scaffold_shape_check_warns_on_extra_pruning(clean_project: Path) -> None:
+def test_scaffold_shape_check_emits_info_on_pruning(clean_project: Path) -> None:
+    """Pruning is allowed — the check is INFO, not WARNING, to keep audit quiet."""
     (clean_project / "docs" / "API.md").unlink()
     findings = ScaffoldShapeCheck().run(clean_project)
     assert any("API.md" in f.message for f in findings)
-    assert all(f.severity is Severity.WARNING for f in findings)
+    assert all(f.severity is Severity.INFO for f in findings)
+
+
+def test_scaffold_shape_check_honours_skip_list(clean_project: Path) -> None:
+    """`.socrates-audit.json` lets the operator silence specific paths."""
+    import json
+    (clean_project / "docs" / "API.md").unlink()
+    (clean_project / "docs" / "PERMISSIONS.md").unlink()
+    (clean_project / ".socrates-audit.json").write_text(
+        json.dumps({"scaffold_shape": {"ignore": ["docs/API.md"]}})
+    )
+    findings = ScaffoldShapeCheck().run(clean_project)
+    messages = [f.message for f in findings]
+    # API.md was ignored; PERMISSIONS.md still fires.
+    assert not any("API.md" in m for m in messages)
+    assert any("PERMISSIONS.md" in m for m in messages)
 
 
 def test_sprint_folder_check_flags_bad_name(clean_project: Path) -> None:
