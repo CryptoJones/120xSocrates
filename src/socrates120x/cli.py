@@ -14,15 +14,17 @@ from pathlib import Path
 from typing import Any
 
 from socrates120x import __version__
-from socrates120x.audit import format_report, run_audit
+from socrates120x.audit import format_report, looks_like_companyos, run_audit
 from socrates120x.audit.model import Severity
 from socrates120x.companyos import scaffold_companyos
 from socrates120x.extract import run_extract
 from socrates120x.interview import Interview, is_interactive
 from socrates120x.journal import create_or_open_entry
 from socrates120x.onboard import synthesize_welcome, write_welcome
+from socrates120x.patterns import format_pattern_report, review_patterns
 from socrates120x.render import render_all
 from socrates120x.scaffold import scaffold
+from socrates120x.status import companyos_status, format_status
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,6 +69,42 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument(
         "--editor", action="store_true",
         help="For multi-line questions, open $EDITOR instead of prompting line-by-line.",
+    )
+
+    patterns = sub.add_parser(
+        "patterns",
+        help="Inspect the patterns/ folder for staleness, orphans, and unused candidates.",
+        description=(
+            "Operates at the CompanyOS root. Scans patterns/ and reports "
+            "stale candidates (>90d old), patterns whose source project no "
+            "longer exists, and patterns whose slug is not referenced from "
+            "any project outside their source — i.e. patterns that have not "
+            "yet compounded."
+        ),
+    )
+    patterns_sub = patterns.add_subparsers(dest="patterns_command", required=True)
+    patterns_review = patterns_sub.add_parser(
+        "review",
+        help="Audit the patterns/ folder.",
+    )
+    patterns_review.add_argument(
+        "path", nargs="?", type=Path, default=Path.cwd(),
+        help="CompanyOS root. Default: cwd.",
+    )
+
+    status = sub.add_parser(
+        "status",
+        help="One-screen health dashboard for every project in a CompanyOS.",
+        description=(
+            "Scan every builds/<project>/ under a CompanyOS root and print a "
+            "one-line health summary per project: active sprint, audit error "
+            "count, days since STATE / journal updates, whether extract has "
+            "been run. Designed as the first thing the operator reads each day."
+        ),
+    )
+    status.add_argument(
+        "path", nargs="?", type=Path, default=Path.cwd(),
+        help="CompanyOS root. Default: cwd.",
     )
 
     onboard = sub.add_parser(
@@ -173,6 +211,15 @@ def main(argv: list[str] | None = None) -> int:
         "--json", action="store_true",
         help="Emit machine-readable JSON instead of human-readable text.",
     )
+    audit_mode = audit.add_mutually_exclusive_group()
+    audit_mode.add_argument(
+        "--project", action="store_true",
+        help="Force per-project audit (default unless the target looks like a CompanyOS root).",
+    )
+    audit_mode.add_argument(
+        "--companyos", action="store_true",
+        help="Force CompanyOS-level audit (orphan builds/clients/patterns, stale proposals).",
+    )
 
     args = parser.parse_args(argv)
     if args.command == "init":
@@ -187,6 +234,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_extract(args)
     if args.command == "onboard":
         return _cmd_onboard(args)
+    if args.command == "status":
+        return _cmd_status(args)
+    if args.command == "patterns":
+        return _cmd_patterns(args)
     parser.error(f"unknown command: {args.command}")
     return 2  # pragma: no cover
 
@@ -295,6 +346,39 @@ def _print_outro(target: Path, answers: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _cmd_patterns(args: argparse.Namespace) -> int:
+    if args.patterns_command != "review":
+        print(f"error: unknown patterns subcommand: {args.patterns_command}",
+              file=sys.stderr)
+        return 2
+    root: Path = args.path.expanduser().resolve()
+    if not root.is_dir():
+        print(f"error: {root} is not a directory", file=sys.stderr)
+        return 2
+    report = review_patterns(root)
+    print(format_pattern_report(report))
+    return 1 if report.findings else 0
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    root: Path = args.path.expanduser().resolve()
+    if not root.is_dir():
+        print(f"error: {root} is not a directory", file=sys.stderr)
+        return 2
+    if not looks_like_companyos(root):
+        print(
+            f"warning: {root} does not look like a CompanyOS root "
+            f"(expected builds/, patterns/, and AGENTS.md). "
+            f"Did you mean to run this against the parent of {root.name}?",
+            file=sys.stderr,
+        )
+    rows = companyos_status(root)
+    print(format_status(rows))
+    # Exit 1 if any project has audit errors — useful in CI.
+    any_errors = any(r.audit_errors > 0 for r in rows)
+    return 1 if any_errors else 0
+
+
 def _cmd_onboard(args: argparse.Namespace) -> int:
     project: Path = args.path.expanduser().resolve()
     if not project.is_dir():
@@ -359,7 +443,15 @@ def _cmd_audit(args: argparse.Namespace) -> int:
         print(f"error: {path} is not a directory", file=sys.stderr)
         return 2
 
-    report = run_audit(path)
+    # Mode resolution: explicit flag beats auto-detection.
+    if args.companyos:
+        companyos = True
+    elif args.project:
+        companyos = False
+    else:
+        companyos = looks_like_companyos(path)
+
+    report = run_audit(path, companyos=companyos)
     output = format_report(report, as_json=args.json)
     print(output)
 

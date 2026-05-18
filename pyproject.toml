@@ -1,6 +1,6 @@
 [project]
 name = "socrates120x"
-version = "0.3.1"
+version = "0.4.0"
 description = "Interactive CLI that interrogates you Socratic-style and fills out the planning docs for a 120x Operators Kit project."
 readme = "README.md"
 requires-python = ">=3.10"
