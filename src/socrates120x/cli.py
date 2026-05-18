@@ -57,6 +57,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Run the interview and save answers but do NOT write the .md files yet.",
     )
     parser.add_argument(
+        "--editor",
+        action="store_true",
+        help=(
+            "For multi-line answers, open $EDITOR (or $VISUAL, or nano/vim/vi) "
+            "instead of prompting line-by-line. Useful for paragraphs."
+        ),
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
@@ -98,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         answers_path=target / ".socrates-answers.json",
         project_name=target.name,
         resume=args.resume,
+        editor=args.editor,
     )
     try:
         interview.run()

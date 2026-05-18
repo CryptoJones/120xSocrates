@@ -65,6 +65,16 @@ Answers are saved incrementally to `.socrates-answers.json` inside the project f
 socrates quarterly-rebates --resume
 ```
 
+### Editor mode for prose answers
+
+Multi-line questions (business goal, current process, etc.) accept a line-by-line `.`-terminated input by default. For longer paragraphs, pass `--editor` and socrates will open `$EDITOR` (or `$VISUAL`, falling back to `nano`/`vim`/`vi`) with a tempfile per question:
+
+```bash
+socrates quarterly-rebates --editor
+```
+
+Comment lines (`#`-prefixed) are stripped on save. An empty file accepts the question's default if one exists.
+
 ## How the interview is structured
 
 The questions follow the 120x Operators Kit's own document layout, so each answer maps to exactly one place in the resulting folder:
