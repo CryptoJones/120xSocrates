@@ -7,7 +7,7 @@ Interactive CLI that interrogates you Socratic-style and fills out the planning 
 [![Codeberg](https://img.shields.io/badge/Codeberg-CryptoJones%2F120xSocrates-2185D0?logo=codeberg&logoColor=white)](https://codeberg.org/CryptoJones/120xSocrates)
 [![GitHub](https://img.shields.io/badge/GitHub-CryptoJones%2F120xSocrates-181717?logo=github&logoColor=white)](https://github.com/CryptoJones/120xSocrates)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-v0.3.0-orange)]()
+[![Version](https://img.shields.io/badge/version-v0.5.0-orange)]()
 
 > Mirrored on both [GitHub](https://github.com/CryptoJones/120xSocrates) and
 > [Codeberg](https://codeberg.org/CryptoJones/120xSocrates). Issues filed on
@@ -61,18 +61,31 @@ socrates extract
 
 ## Subcommands
 
-`socrates` ships six subcommands. They are designed to be composable —
+`socrates` ships ten subcommands. They are designed to be composable —
 each one operates on a 120x folder produced by `socrates init` or
 `socrates companyos`.
 
+**Per-project commands** (run inside a single `builds/<project>/`):
+
 | Subcommand | One-liner |
 |---|---|
-| [`socrates init`](#socrates-init-slug--interview-a-new-project) | scaffold a project and interview the operator |
-| [`socrates audit`](#socrates-audit-path--verify-an-existing-project) | verify planning files for internal consistency |
-| [`socrates onboard`](#socrates-onboard-path--synthesize-welcomemd) | produce a 60-second WELCOME.md from existing planning files |
-| [`socrates journal`](#socrates-journal-path--append-only-daily-log) | open today's planning/journal/YYYY-MM-DD.md entry |
-| [`socrates extract`](#socrates-extract-path--capture-a-reusable-pattern) | sprint-close interview to capture a reusable pattern |
-| [`socrates companyos`](#socrates-companyos-path--scaffold-the-macro-layer) | scaffold the macro layer that wraps per-project builds |
+| `socrates init <slug>` | scaffold a project and interview the operator |
+| `socrates audit [path]` | verify planning files for internal consistency |
+| `socrates onboard [path]` | produce a 60-second WELCOME.md from existing planning files |
+| `socrates journal [path]` | open today's `planning/journal/YYYY-MM-DD.md` entry |
+| `socrates extract [path]` | sprint-close interview to capture a reusable pattern |
+| `socrates timeline [path]` | chronological feed of journal entries, sprints, and dated decisions |
+| `socrates ship [path]` | sprint-close pre-flight: audit + journal + extract + state freshness |
+| `socrates pack [path]` | assemble an Architect input bundle for browser chat |
+
+**Macro-level commands** (run at the CompanyOS root):
+
+| Subcommand | One-liner |
+|---|---|
+| `socrates companyos <path>` | scaffold the macro layer that wraps per-project builds |
+| `socrates status [path]` | one-screen health dashboard for every project in a CompanyOS |
+| `socrates patterns review [path]` | scan `patterns/` for stale candidates, orphans, and unused entries |
+| `socrates audit --companyos [path]` | macro-level audit (orphan builds/clients/patterns, stale proposals) |
 
 ### `socrates init <slug>` — interview a new project
 

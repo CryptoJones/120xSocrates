@@ -21,10 +21,13 @@ from socrates120x.extract import run_extract
 from socrates120x.interview import Interview, is_interactive
 from socrates120x.journal import create_or_open_entry
 from socrates120x.onboard import synthesize_welcome, write_welcome
+from socrates120x.pack import build_pack, write_pack
 from socrates120x.patterns import format_pattern_report, review_patterns
 from socrates120x.render import render_all
 from socrates120x.scaffold import scaffold
+from socrates120x.ship import CheckResult, format_preflight, preflight
 from socrates120x.status import companyos_status, format_status
+from socrates120x.timeline import build_timeline, format_timeline
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -69,6 +72,56 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument(
         "--editor", action="store_true",
         help="For multi-line questions, open $EDITOR instead of prompting line-by-line.",
+    )
+
+    timeline = sub.add_parser(
+        "timeline",
+        help="Chronological view of journal entries, sprints, and dated decisions.",
+        description=(
+            "Build a single chronological feed from planning/journal/, "
+            "planning/sprints/, and dated entries in DECISIONS.md. Answers "
+            "'what happened on this project, in order?' without scanning git log."
+        ),
+    )
+    timeline.add_argument(
+        "path", nargs="?", type=Path, default=Path.cwd(),
+        help="Project folder. Default: cwd.",
+    )
+
+    ship = sub.add_parser(
+        "ship",
+        help="Sprint-close pre-flight: audit + journal + extract + state freshness.",
+        description=(
+            "Run the four pre-flight checks before declaring a sprint complete. "
+            "Composition command — chains existing logic into one ritual. "
+            "Exits non-zero if any check fails."
+        ),
+    )
+    ship.add_argument(
+        "path", nargs="?", type=Path, default=Path.cwd(),
+        help="Project folder. Default: cwd.",
+    )
+
+    pack = sub.add_parser(
+        "pack",
+        help="Assemble an Architect input bundle (single markdown file).",
+        description=(
+            "Concatenate AGENTS / STATE / DOMAIN / DECISIONS / RISKS / QUESTIONS "
+            "and the active sprint's files into one paste-able markdown bundle "
+            "for the Architect (browser chat) session."
+        ),
+    )
+    pack.add_argument(
+        "path", nargs="?", type=Path, default=Path.cwd(),
+        help="Project folder. Default: cwd.",
+    )
+    pack.add_argument(
+        "--sprint", type=str, default=None,
+        help="Include this sprint folder instead of auto-detecting the highest-numbered one.",
+    )
+    pack.add_argument(
+        "--stdout", action="store_true",
+        help="Print to stdout instead of writing .socrates-architect-pack.md.",
     )
 
     patterns = sub.add_parser(
@@ -238,6 +291,12 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_status(args)
     if args.command == "patterns":
         return _cmd_patterns(args)
+    if args.command == "timeline":
+        return _cmd_timeline(args)
+    if args.command == "ship":
+        return _cmd_ship(args)
+    if args.command == "pack":
+        return _cmd_pack(args)
     parser.error(f"unknown command: {args.command}")
     return 2  # pragma: no cover
 
@@ -344,6 +403,41 @@ def _print_outro(target: Path, answers: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # `audit` subcommand
 # ---------------------------------------------------------------------------
+
+
+def _cmd_timeline(args: argparse.Namespace) -> int:
+    project: Path = args.path.expanduser().resolve()
+    if not project.is_dir():
+        print(f"error: {project} is not a directory", file=sys.stderr)
+        return 2
+    events = build_timeline(project)
+    print(format_timeline(events))
+    return 0
+
+
+def _cmd_ship(args: argparse.Namespace) -> int:
+    project: Path = args.path.expanduser().resolve()
+    if not project.is_dir():
+        print(f"error: {project} is not a directory", file=sys.stderr)
+        return 2
+    findings = preflight(project)
+    print(format_preflight(findings))
+    if any(f.result is CheckResult.FAIL for f in findings):
+        return 1
+    return 0
+
+
+def _cmd_pack(args: argparse.Namespace) -> int:
+    project: Path = args.path.expanduser().resolve()
+    if not project.is_dir():
+        print(f"error: {project} is not a directory", file=sys.stderr)
+        return 2
+    if args.stdout:
+        print(build_pack(project, include_sprint=args.sprint))
+        return 0
+    target = write_pack(project, include_sprint=args.sprint)
+    print(f"Wrote {target}")
+    return 0
 
 
 def _cmd_patterns(args: argparse.Namespace) -> int:
