@@ -1,0 +1,61 @@
+[project]
+name = "socrates120x"
+version = "0.1.0"
+description = "Interactive CLI that interrogates you Socratic-style and fills out the planning docs for a 120x Operators Kit project."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Aaron K. Clark", email = "akclark@thenetwerk.net" }]
+keywords = ["120x", "scaffold", "planning", "cli", "interview", "socratic", "operators-kit"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "mypy>=1.9",
+]
+
+[project.scripts]
+socrates = "socrates120x.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/CryptoJones/120xSocrates"
+Repository = "https://github.com/CryptoJones/120xSocrates"
+Mirror = "https://codeberg.org/CryptoJones/120xSocrates"
+Issues = "https://github.com/CryptoJones/120xSocrates/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/socrates120x"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+# Disable E501 (line-too-long) globally: most violations are in markdown
+# template strings inside render.py where reflowing hurts readability and
+# does not improve correctness. Real long lines in code should still be
+# caught by review.
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
