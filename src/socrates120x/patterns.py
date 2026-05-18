@@ -23,10 +23,11 @@ import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 STALE_CANDIDATE_DAYS = 90
 USAGE_CACHE_FILENAME = ".usage-cache.json"
-USAGE_CACHE_VERSION = 1
+USAGE_CACHE_VERSION = 2
 
 
 class FindingKind(Enum):
@@ -53,10 +54,11 @@ class PatternReport:
 def review_patterns(companyos_root: Path, *, use_cache: bool = True) -> PatternReport:
     """Inspect *companyos_root*/patterns/ and report drift.
 
-    ``use_cache=True`` (the default) reads ``patterns/.usage-cache.json`` if
-    fresh (no input file mtime exceeds the cache snapshot) and uses its
-    pre-computed usage map. ``use_cache=False`` forces a full rescan; the
-    cache is still written.
+    ``use_cache=True`` (the default) reads ``patterns/.usage-cache.json`` and
+    reuses any **per-project segment** whose tracked mtime hasn't changed.
+    Adding/removing a pattern invalidates the slug-set check and forces a
+    re-grep per project; changing a file in project P only invalidates P.
+    Pass ``use_cache=False`` to drop the cache entirely for one run.
     """
     patterns_dir = companyos_root / "patterns"
     findings: list[PatternFinding] = []
@@ -73,16 +75,8 @@ def review_patterns(companyos_root: Path, *, use_cache: bool = True) -> PatternR
         build_names = None
 
     pattern_files = sorted(p for p in patterns_dir.glob("*.md") if p.name != "README.md")
-
-    # Try to use the cached usage map.
-    usage_map: dict[str, list[str]] | None = None
-    if use_cache:
-        usage_map = _load_usage_cache(patterns_dir, builds_dir)
-
-    if usage_map is None:
-        # Recompute from scratch and persist.
-        usage_map = _compute_usage_map(pattern_files, builds_dir, build_names)
-        _save_usage_cache(patterns_dir, builds_dir, usage_map)
+    cache = _load_usage_cache(patterns_dir) if use_cache else None
+    usage_map = _compute_usage_map(pattern_files, builds_dir, build_names, cache=cache)
 
     today = _dt.date.today()
     for pattern in pattern_files:
@@ -144,7 +138,25 @@ def review_patterns(companyos_root: Path, *, use_cache: bool = True) -> PatternR
 
 
 # ---------------------------------------------------------------------------
-# Usage cache
+# Usage cache (per-project segments, v2)
+#
+# Schema:
+#   {
+#     "version": 2,
+#     "computed_at": "ISO-8601",
+#     "slug_set": ["validate-numbers", "ingest-pipeline", ...],
+#     "projects": {
+#       "alpha": {"mtime": 1620000000.0, "matched_slugs": ["validate-numbers"]},
+#       "beta":  {"mtime": 1620100000.0, "matched_slugs": []}
+#     }
+#   }
+#
+# Per-project segment reuse: if a project's tracked mtime equals the live max
+# mtime of its *.md files, that project's matched_slugs are reused verbatim.
+# Otherwise we re-grep that project against the current slug_set. Adding or
+# removing a pattern changes the slug_set, which forces every per-project
+# segment to recompute (cheaper than re-grepping nothing would be wrong; the
+# alternative — diffing slugs — is deferred until anyone hits the limit).
 # ---------------------------------------------------------------------------
 
 
@@ -152,36 +164,83 @@ def _compute_usage_map(
     pattern_files: list[Path],
     builds_dir: Path,
     build_names: set[str] | None,
+    *,
+    cache: dict[str, Any] | None = None,
 ) -> dict[str, list[str]]:
-    """Grep every build for every pattern slug; return slug -> [project, ...]."""
+    """Return slug -> [project, ...]; updates and persists the cache as a side effect."""
     if not build_names:
         return {}
-    result: dict[str, list[str]] = {}
-    for pattern in pattern_files:
-        slug = _pattern_slug(pattern.name)
-        if not slug:
-            continue
-        result[slug] = _projects_mentioning(slug, builds_dir, build_names)
-    return result
 
+    current_slugs = sorted({s for p in pattern_files if (s := _pattern_slug(p.name))})
+    cached_slug_set = cache.get("slug_set") if cache else None
+    slug_set_unchanged = cached_slug_set == current_slugs
 
-def _projects_mentioning(slug: str, builds_dir: Path, build_names: set[str]) -> list[str]:
-    needle = slug.lower()
-    hits: list[str] = []
+    cached_projects = cache.get("projects", {}) if cache else {}
+
+    new_projects: dict[str, dict[str, Any]] = {}
     for name in sorted(build_names):
-        project = builds_dir / name
-        for f in project.rglob("*.md"):
-            try:
-                text = f.read_text(errors="replace").lower()
-            except OSError:
-                continue
-            if needle in text:
-                hits.append(name)
-                break
-    return hits
+        project_dir = builds_dir / name
+        live_mtime = _project_mtime(project_dir)
+        cached_proj = cached_projects.get(name)
+        if (
+            slug_set_unchanged
+            and cached_proj is not None
+            and _approx_eq(cached_proj.get("mtime"), live_mtime)
+            and isinstance(cached_proj.get("matched_slugs"), list)
+        ):
+            matched = [str(s) for s in cached_proj["matched_slugs"] if isinstance(s, str)]
+        else:
+            matched = [s for s in current_slugs if _slug_in_project(s, project_dir)]
+        new_projects[name] = {"mtime": live_mtime, "matched_slugs": matched}
+
+    # Persist the refreshed cache.
+    payload = {
+        "version": USAGE_CACHE_VERSION,
+        "computed_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        "slug_set": current_slugs,
+        "projects": new_projects,
+    }
+    _save_usage_cache(pattern_files[0].parent if pattern_files else builds_dir.parent / "patterns", payload)
+
+    # Invert: slug -> list of projects mentioning it.
+    inverted: dict[str, list[str]] = {slug: [] for slug in current_slugs}
+    for proj_name, info in new_projects.items():
+        for slug in info["matched_slugs"]:
+            if slug in inverted:
+                inverted[slug].append(proj_name)
+    return inverted
 
 
-def _load_usage_cache(patterns_dir: Path, builds_dir: Path) -> dict[str, list[str]] | None:
+def _slug_in_project(slug: str, project_dir: Path) -> bool:
+    needle = slug.lower()
+    for f in project_dir.rglob("*.md"):
+        try:
+            text = f.read_text(errors="replace").lower()
+        except OSError:
+            continue
+        if needle in text:
+            return True
+    return False
+
+
+def _project_mtime(project_dir: Path) -> float:
+    max_mtime = 0.0
+    for f in project_dir.rglob("*.md"):
+        try:
+            max_mtime = max(max_mtime, f.stat().st_mtime)
+        except OSError:
+            continue
+    return max_mtime
+
+
+def _approx_eq(a: object, b: float) -> bool:
+    """mtime equality with a tiny tolerance — JSON round-trip can shave fractions."""
+    if not isinstance(a, (int, float)):
+        return False
+    return abs(float(a) - b) < 0.001
+
+
+def _load_usage_cache(patterns_dir: Path) -> dict[str, Any] | None:
     cache_path = patterns_dir / USAGE_CACHE_FILENAME
     if not cache_path.is_file():
         return None
@@ -193,53 +252,16 @@ def _load_usage_cache(patterns_dir: Path, builds_dir: Path) -> dict[str, list[st
         return None
     if data.get("version") != USAGE_CACHE_VERSION:
         return None
-    cached_mtime = data.get("max_input_mtime")
-    if not isinstance(cached_mtime, (int, float)):
+    if not isinstance(data.get("projects"), dict):
         return None
-    current_mtime = _max_input_mtime(patterns_dir, builds_dir)
-    if current_mtime > cached_mtime:
-        return None  # cache stale
-    usage = data.get("usage")
-    if not isinstance(usage, dict):
-        return None
-    # Coerce values to list[str] defensively.
-    out: dict[str, list[str]] = {}
-    for slug, names in usage.items():
-        if isinstance(names, list):
-            out[str(slug)] = [str(n) for n in names if isinstance(n, str)]
-    return out
+    return data
 
 
-def _save_usage_cache(
-    patterns_dir: Path,
-    builds_dir: Path,
-    usage_map: dict[str, list[str]],
-) -> None:
-    payload = {
-        "version": USAGE_CACHE_VERSION,
-        "computed_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
-        "max_input_mtime": _max_input_mtime(patterns_dir, builds_dir),
-        "usage": usage_map,
-    }
+def _save_usage_cache(patterns_dir: Path, payload: dict[str, Any]) -> None:
+    if not patterns_dir.is_dir():
+        return
     with contextlib.suppress(OSError):
         (patterns_dir / USAGE_CACHE_FILENAME).write_text(json.dumps(payload, indent=2))
-
-
-def _max_input_mtime(patterns_dir: Path, builds_dir: Path) -> float:
-    """Largest mtime across every input that could affect the usage map."""
-    max_mtime = 0.0
-    for p in patterns_dir.glob("*.md"):
-        try:
-            max_mtime = max(max_mtime, p.stat().st_mtime)
-        except OSError:
-            continue
-    if builds_dir.is_dir():
-        for p in builds_dir.rglob("*.md"):
-            try:
-                max_mtime = max(max_mtime, p.stat().st_mtime)
-            except OSError:
-                continue
-    return max_mtime
 
 
 def format_pattern_report(report: PatternReport, *, use_color: bool | None = None) -> str:

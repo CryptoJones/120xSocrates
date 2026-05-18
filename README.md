@@ -7,7 +7,7 @@ Interactive CLI that interrogates you Socratic-style and fills out the planning 
 [![Codeberg](https://img.shields.io/badge/Codeberg-CryptoJones%2F120xSocrates-2185D0?logo=codeberg&logoColor=white)](https://codeberg.org/CryptoJones/120xSocrates)
 [![GitHub](https://img.shields.io/badge/GitHub-CryptoJones%2F120xSocrates-181717?logo=github&logoColor=white)](https://github.com/CryptoJones/120xSocrates)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-v0.6.0-orange)]()
+[![Version](https://img.shields.io/badge/version-v0.7.0-orange)]()
 
 > Mirrored on both [GitHub](https://github.com/CryptoJones/120xSocrates) and
 > [Codeberg](https://codeberg.org/CryptoJones/120xSocrates). Issues filed on
@@ -61,7 +61,7 @@ socrates extract
 
 ## Subcommands
 
-`socrates` ships ten subcommands. They are designed to be composable —
+`socrates` ships eleven subcommands. They are designed to be composable —
 each one operates on a 120x folder produced by `socrates init` or
 `socrates companyos`.
 
@@ -73,6 +73,7 @@ each one operates on a 120x folder produced by `socrates init` or
 | `socrates audit [path]` | verify planning files for internal consistency |
 | `socrates onboard [path]` | produce a 60-second WELCOME.md from existing planning files |
 | `socrates journal [path]` | open today's `planning/journal/YYYY-MM-DD.md` entry |
+| `socrates decide "<text>"` | append a dated decision to `planning/DECISIONS.md` |
 | `socrates extract [path]` | sprint-close interview to capture a reusable pattern |
 | `socrates timeline [path]` | chronological feed of journal entries, sprints, and dated decisions |
 | `socrates ship [path]` | sprint-close pre-flight: audit + journal + extract + state freshness |

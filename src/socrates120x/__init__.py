@@ -1,3 +1,3 @@
 """120xSocrates — Socratic interview tool for 120x Operators Kit projects."""
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"

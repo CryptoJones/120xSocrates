@@ -145,58 +145,88 @@ def test_review_writes_usage_cache(company: Path) -> None:
     assert cache_path.is_file()
     import json
     data = json.loads(cache_path.read_text())
-    assert data["version"] == 1
-    assert "x" in data["usage"]
+    assert data["version"] == 2
+    assert "x" in data["slug_set"]
+    assert "alpha" in data["projects"]
+    assert isinstance(data["projects"]["alpha"]["matched_slugs"], list)
 
 
-def test_cache_is_used_when_fresh(company: Path) -> None:
-    """A pre-existing cache should be honoured if no input is newer than it."""
+def test_cache_per_project_segment_is_reused(company: Path) -> None:
+    """If a project's mtime is unchanged AND slug_set is unchanged, that
+    project's cached matched_slugs is trusted verbatim — including
+    fabricated entries we inject for the test."""
     import json
     _make_build(company, "alpha")
     today = _dt.date.today().isoformat()
     (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
-    # First call writes the cache.
     review_patterns(company)
     cache_path = company / "patterns" / ".usage-cache.json"
     data = json.loads(cache_path.read_text())
 
-    # Manually flip the cache's claim about pattern x's usage, then ensure the
-    # second review trusts our injected value (proves cache is read).
-    data["usage"]["x"] = ["alpha", "fake-other-project"]
-    # Bump the max_input_mtime far into the future so it stays fresh no matter what.
-    data["max_input_mtime"] = data["max_input_mtime"] + 1_000_000
+    # Inject a fake matched slug into alpha's segment WITHOUT changing alpha's mtime.
+    data["projects"]["alpha"]["matched_slugs"] = ["x", "phantom-slug"]
     cache_path.write_text(json.dumps(data))
 
-    report = review_patterns(company)
-    # If the cache was used, the unused-check should NOT fire (the cache claims
-    # the slug is referenced by 'fake-other-project').
-    unused = [f for f in report.findings if f.kind == FindingKind.UNUSED]
-    assert not any("validate-numbers" in f.path.name or f.path.name == "CANDIDATE-x.md" for f in unused)
+    review_patterns(company)
+    refreshed = json.loads(cache_path.read_text())
+    # The injected entry must survive — alpha's segment was reused.
+    assert "phantom-slug" in refreshed["projects"]["alpha"]["matched_slugs"]
 
 
-def test_cache_invalidated_when_inputs_change(company: Path) -> None:
-    """Touching a project file should invalidate the cache."""
+def test_cache_invalidated_per_project_on_mtime_bump(company: Path) -> None:
+    """Touching a file in alpha should re-grep alpha only — and overwrite
+    that project's cached matched_slugs."""
     import json
     import os
     import time
     alpha = _make_build(company, "alpha")
+    _make_build(company, "beta")
     today = _dt.date.today().isoformat()
     (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
-    review_patterns(company)  # populates cache
+    review_patterns(company)
+    cache_path = company / "patterns" / ".usage-cache.json"
 
-    # Touch a markdown file in alpha so mtime advances past the cache snapshot.
+    # Inject phantom slugs into BOTH project segments.
+    data = json.loads(cache_path.read_text())
+    data["projects"]["alpha"]["matched_slugs"] = ["x", "phantom-from-alpha"]
+    data["projects"]["beta"]["matched_slugs"] = ["phantom-from-beta"]
+    cache_path.write_text(json.dumps(data))
+
+    # Bump alpha's mtime, leave beta alone.
     state = alpha / "planning" / "STATE.md"
-    time.sleep(0.05)  # ensure mtime resolution > cache write timestamp
-    state_mtime = state.stat().st_mtime + 5
-    os.utime(state, (state_mtime, state_mtime))
+    time.sleep(0.05)
+    new_mtime = state.stat().st_mtime + 5
+    os.utime(state, (new_mtime, new_mtime))
 
-    # Force a rescan path via mtime invalidation (use_cache=True default).
-    report = review_patterns(company)
-    # Cache should have been refreshed with the new max_input_mtime.
-    cache = json.loads((company / "patterns" / ".usage-cache.json").read_text())
-    assert cache["max_input_mtime"] >= state_mtime
-    # Sanity: no crash, no spurious findings beyond the orphan/unused report.
-    assert isinstance(report.findings, list)
+    review_patterns(company)
+    refreshed = json.loads(cache_path.read_text())
+    # alpha was rescanned; phantom entry is gone.
+    assert "phantom-from-alpha" not in refreshed["projects"]["alpha"]["matched_slugs"]
+    # beta was NOT rescanned; phantom entry survives.
+    assert "phantom-from-beta" in refreshed["projects"]["beta"]["matched_slugs"]
+
+
+def test_cache_invalidated_when_slug_set_changes(company: Path) -> None:
+    """Adding a new pattern invalidates every project's segment."""
+    import json
+    _make_build(company, "alpha")
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    review_patterns(company)
+    cache_path = company / "patterns" / ".usage-cache.json"
+
+    # Inject a phantom slug; will be wiped when the slug_set changes.
+    data = json.loads(cache_path.read_text())
+    data["projects"]["alpha"]["matched_slugs"] = ["x", "phantom"]
+    cache_path.write_text(json.dumps(data))
+
+    # Add a second pattern. slug_set changes.
+    (company / "patterns" / "CANDIDATE-y.md").write_text(_pattern(today, "alpha", "y"))
+    review_patterns(company)
+
+    refreshed = json.loads(cache_path.read_text())
+    assert "phantom" not in refreshed["projects"]["alpha"]["matched_slugs"]
+    assert set(refreshed["slug_set"]) == {"x", "y"}
 
 
 def test_use_cache_false_forces_rescan(company: Path) -> None:
@@ -205,20 +235,34 @@ def test_use_cache_false_forces_rescan(company: Path) -> None:
     _make_build(company, "alpha")
     today = _dt.date.today().isoformat()
     (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
-    # Seed a stale cache claiming the slug is used.
+    cache_path = company / "patterns" / ".usage-cache.json"
+    # Seed a stale cache that claims alpha mentions a phantom slug.
+    cache_path.write_text(json.dumps({
+        "version": 2,
+        "computed_at": "1970-01-01T00:00:00+00:00",
+        "slug_set": ["x"],
+        "projects": {"alpha": {"mtime": 9_999_999_999.0, "matched_slugs": ["x", "phantom"]}},
+    }))
+    review_patterns(company, use_cache=False)
+    refreshed = json.loads(cache_path.read_text())
+    # Cache was overwritten; phantom is gone.
+    assert "phantom" not in refreshed["projects"]["alpha"]["matched_slugs"]
+
+
+def test_cache_rejects_old_version(company: Path) -> None:
+    """A v1 cache (from earlier socrates) is treated as missing."""
+    import json
+    _make_build(company, "alpha")
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
     cache_path = company / "patterns" / ".usage-cache.json"
     cache_path.write_text(json.dumps({
         "version": 1,
         "computed_at": "1970-01-01T00:00:00+00:00",
-        "max_input_mtime": 9_999_999_999.0,  # implausibly future
-        "usage": {"x": ["alpha", "phantom-project"]},
+        "max_input_mtime": 9_999_999_999.0,
+        "usage": {"x": ["alpha", "phantom-from-v1"]},
     }))
-    # With cache disabled, the rescan happens — phantom-project is NOT real,
-    # so x has no real outside-use and should be flagged unused IF other
-    # projects exist. With only "alpha" present, the unused check is skipped
-    # anyway. The point of this test is that no crash + cache gets overwritten.
-    report = review_patterns(company, use_cache=False)
-    new_cache = json.loads(cache_path.read_text())
-    assert new_cache["max_input_mtime"] < 9_999_999_999.0  # cache was refreshed
-    # Sanity
-    assert isinstance(report.findings, list)
+    review_patterns(company)
+    refreshed = json.loads(cache_path.read_text())
+    assert refreshed["version"] == 2
+    assert "phantom-from-v1" not in str(refreshed)

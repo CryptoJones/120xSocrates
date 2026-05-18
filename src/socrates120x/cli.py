@@ -17,6 +17,7 @@ from socrates120x import __version__
 from socrates120x.audit import format_report, looks_like_companyos, run_audit
 from socrates120x.audit.model import Severity
 from socrates120x.companyos import scaffold_companyos
+from socrates120x.decide import record_decision
 from socrates120x.extract import run_extract
 from socrates120x.interview import Interview, is_interactive
 from socrates120x.journal import create_or_open_entry
@@ -245,6 +246,25 @@ def main(argv: list[str] | None = None) -> int:
         help="Directory to scaffold the CompanyOS into (created if missing).",
     )
 
+    decide = sub.add_parser(
+        "decide",
+        help="Append a dated decision to planning/DECISIONS.md.",
+        description=(
+            "Append one decision to the project's DECISIONS.md, stamped with "
+            "today's date in the `(YYYY-MM-DD)` format that `socrates timeline` "
+            "reads. The decision lands in a 'Decisions added after init' "
+            "section so the Sprint 001 history stays distinct."
+        ),
+    )
+    decide.add_argument(
+        "text",
+        help='The decision body, e.g. "DuckDB over Postgres — local file is fine".',
+    )
+    decide.add_argument(
+        "--path", type=Path, default=Path.cwd(),
+        help="Project folder. Default: cwd.",
+    )
+
     journal = sub.add_parser(
         "journal",
         help="Create or open today's planning/journal/YYYY-MM-DD.md entry.",
@@ -320,6 +340,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ship(args)
     if args.command == "pack":
         return _cmd_pack(args)
+    if args.command == "decide":
+        return _cmd_decide(args)
     parser.error(f"unknown command: {args.command}")
     return 2  # pragma: no cover
 
@@ -448,6 +470,14 @@ def _cmd_ship(args: argparse.Namespace) -> int:
     if any(f.result is CheckResult.FAIL for f in findings):
         return 1
     return 0
+
+
+def _cmd_decide(args: argparse.Namespace) -> int:
+    project: Path = args.path.expanduser().resolve()
+    if not project.is_dir():
+        print(f"error: {project} is not a directory", file=sys.stderr)
+        return 2
+    return record_decision(project, args.text)
 
 
 def _cmd_pack(args: argparse.Namespace) -> int:
