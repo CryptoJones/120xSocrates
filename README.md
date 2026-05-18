@@ -7,7 +7,7 @@ Interactive CLI that interrogates you Socratic-style and fills out the planning 
 [![Codeberg](https://img.shields.io/badge/Codeberg-CryptoJones%2F120xSocrates-2185D0?logo=codeberg&logoColor=white)](https://codeberg.org/CryptoJones/120xSocrates)
 [![GitHub](https://img.shields.io/badge/GitHub-CryptoJones%2F120xSocrates-181717?logo=github&logoColor=white)](https://github.com/CryptoJones/120xSocrates)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-v0.1.0-orange)]()
+[![Version](https://img.shields.io/badge/version-v0.2.0-orange)]()
 
 > Mirrored on both [GitHub](https://github.com/CryptoJones/120xSocrates) and
 > [Codeberg](https://codeberg.org/CryptoJones/120xSocrates). Issues filed on
@@ -38,44 +38,67 @@ git clone https://github.com/CryptoJones/120xSocrates.git
 cd 120xSocrates
 pip install -e .
 
-# run the interview against a fresh project
+# scaffold + interview a fresh project
 cd ~/Documents/120x-builds
-socrates quarterly-rebates
+socrates init quarterly-rebates
+
+# later, verify the planning files stayed consistent
+socrates audit ./quarterly-rebates
 ```
 
 Or run without installing:
 
 ```bash
-python -m socrates120x quarterly-rebates
+python -m socrates120x init quarterly-rebates
 ```
 
-### Skipping the scaffold step
+## Subcommands
 
-If you already ran `scaffold.sh` (or are re-running the interview against an existing project), pass `--no-scaffold`:
+### `socrates init <slug>` — interview a new project
+
+Scaffolds the 120x folder tree and walks the operator through the Socratic interview, then writes the planning files.
+
+| Flag | Effect |
+|---|---|
+| `--base PATH` | parent dir for the project folder (default: cwd) |
+| `--no-scaffold` | skip the scaffold step (folder must exist) |
+| `--resume` | resume a partially-completed interview |
+| `--no-render` | save answers but skip writing the `.md` files |
+| `--editor` | use `$EDITOR` for multi-line answers |
+
+Answers are saved incrementally to `.socrates-answers.json` inside the project folder, so Ctrl-C is safe and `--resume` picks up where you left off.
+
+#### Editor mode for prose answers
+
+For longer paragraphs, pass `--editor` and socrates will open `$EDITOR` (honouring `$VISUAL`, falling back to `nano`/`vim`/`vi`) with a tempfile per multi-line question. Comment lines (`#`-prefixed) are stripped on save; an empty file accepts the question's default.
+
+### `socrates audit [path]` — verify an existing project
+
+Scans a populated 120x folder for structural and content issues. Exits non-zero when errors are found, so it slots cleanly into CI:
 
 ```bash
-socrates quarterly-rebates --no-scaffold
+socrates audit                          # audit the current folder
+socrates audit ./quarterly-rebates      # audit a specific project
+socrates audit . --strict               # treat warnings as errors
+socrates audit . --json                 # machine-readable output
 ```
 
-### Resuming an interview
+The audit runs eight checks; each was chosen to be high-signal with **zero tolerance for false positives** (a noisy audit gets ignored):
 
-Answers are saved incrementally to `.socrates-answers.json` inside the project folder. If you Ctrl-C partway through, the next run picks up where you left off.
+| Check | Severity | What it catches |
+|---|---|---|
+| `required-files` | ERROR | one of the canonical planning files is missing |
+| `sprint-folders` | ERROR | a sprint folder is malformed (bad name, missing one of the 4 required files) |
+| `scaffold-shape` | WARNING | a scaffold file was pruned (allowed, but worth noting) |
+| `adapter-routing` | WARNING | `CLAUDE.md` / `CODEX.md` does not point to `AGENTS.md` |
+| `acceptance-weasels` | WARNING | acceptance criteria use vague phrases (`TBD`, `as needed`, `robust enough`, …) |
+| `state-freshness` | WARNING | `STATE.md` has not been touched in 30+ days |
+| `always-on-risks` | INFO | `RISKS.md` is missing the kit's "AI is not source of truth" reminder |
+| `terminology-used` | INFO | a term defined in `DOMAIN.md` is not used anywhere else (dead-weight definition) |
 
-```bash
-socrates quarterly-rebates --resume
-```
+Exit codes: `0` clean (info-only is still clean), `1` errors present (or warnings with `--strict`), `2` invocation error.
 
-### Editor mode for prose answers
-
-Multi-line questions (business goal, current process, etc.) accept a line-by-line `.`-terminated input by default. For longer paragraphs, pass `--editor` and socrates will open `$EDITOR` (or `$VISUAL`, falling back to `nano`/`vim`/`vi`) with a tempfile per question:
-
-```bash
-socrates quarterly-rebates --editor
-```
-
-Comment lines (`#`-prefixed) are stripped on save. An empty file accepts the question's default if one exists.
-
-## How the interview is structured
+## How the `init` interview is structured
 
 The questions follow the 120x Operators Kit's own document layout, so each answer maps to exactly one place in the resulting folder:
 

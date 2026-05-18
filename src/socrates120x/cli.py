@@ -1,4 +1,10 @@
-"""Command-line entrypoint for 120xSocrates."""
+"""Command-line entrypoint for 120xSocrates.
+
+Subcommands:
+
+- `socrates init <slug>`    — scaffold a project and run the Socratic interview
+- `socrates audit [path]`   — verify the planning files of an existing project
+"""
 
 from __future__ import annotations
 
@@ -8,6 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from socrates120x import __version__
+from socrates120x.audit import format_report, run_audit
+from socrates120x.audit.model import Severity
 from socrates120x.interview import Interview, is_interactive
 from socrates120x.render import render_all
 from socrates120x.scaffold import scaffold
@@ -17,60 +25,82 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="socrates",
         description=(
-            "120xSocrates — interrogate the operator and populate the planning "
-            "files for a 120x Operators Kit project."
+            "120xSocrates — tooling on top of the 120x Operators Kit. "
+            "Scaffold + interview a new project, or audit an existing one."
         ),
     )
     parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}",
+    )
+
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    init = sub.add_parser(
+        "init",
+        help="Scaffold a project and run the Socratic interview.",
+        description="Create the 120x folder tree and interview the operator to populate it.",
+    )
+    init.add_argument(
         "project",
-        help=(
-            "Project slug (e.g. 'quarterly-rebates'). A folder of this name is "
-            "created under --base, or under the current working directory if "
-            "--base is omitted."
-        ),
+        help="Project slug (e.g. 'quarterly-rebates'). Becomes a folder under --base.",
     )
-    parser.add_argument(
-        "--base",
-        type=Path,
-        default=Path.cwd(),
+    init.add_argument(
+        "--base", type=Path, default=Path.cwd(),
         help="Parent directory in which to create the project folder. Default: cwd.",
     )
-    parser.add_argument(
-        "--no-scaffold",
-        action="store_true",
-        help=(
-            "Skip the scaffold step. Use when the project folder already exists "
-            "(e.g. from the kit's scaffold.sh)."
+    init.add_argument(
+        "--no-scaffold", action="store_true",
+        help="Skip the scaffold step. Use when the project folder already exists.",
+    )
+    init.add_argument(
+        "--resume", action="store_true",
+        help="Resume a partially-completed interview from .socrates-answers.json.",
+    )
+    init.add_argument(
+        "--no-render", action="store_true",
+        help="Save answers but do NOT write the .md files yet.",
+    )
+    init.add_argument(
+        "--editor", action="store_true",
+        help="For multi-line questions, open $EDITOR instead of prompting line-by-line.",
+    )
+
+    audit = sub.add_parser(
+        "audit",
+        help="Verify the planning files of a 120x project for internal consistency.",
+        description=(
+            "Scan a 120x project for missing files, broken sprint folders, weasel "
+            "words in acceptance criteria, stale STATE, etc. Exits non-zero on errors."
         ),
     )
-    parser.add_argument(
-        "--resume",
-        action="store_true",
-        help=(
-            "Resume an in-progress interview. Loads previously-saved answers "
-            "from .socrates-answers.json and lets you keep or change each one."
-        ),
+    audit.add_argument(
+        "path", nargs="?", type=Path, default=Path.cwd(),
+        help="Project folder to audit. Default: current working directory.",
     )
-    parser.add_argument(
-        "--no-render",
-        action="store_true",
-        help="Run the interview and save answers but do NOT write the .md files yet.",
+    audit.add_argument(
+        "--strict", action="store_true",
+        help="Treat warnings as errors when computing the exit code.",
     )
-    parser.add_argument(
-        "--editor",
-        action="store_true",
-        help=(
-            "For multi-line answers, open $EDITOR (or $VISUAL, or nano/vim/vi) "
-            "instead of prompting line-by-line. Useful for paragraphs."
-        ),
-    )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {__version__}",
+    audit.add_argument(
+        "--json", action="store_true",
+        help="Emit machine-readable JSON instead of human-readable text.",
     )
 
     args = parser.parse_args(argv)
+    if args.command == "init":
+        return _cmd_init(args)
+    if args.command == "audit":
+        return _cmd_audit(args)
+    parser.error(f"unknown command: {args.command}")
+    return 2  # pragma: no cover
+
+
+# ---------------------------------------------------------------------------
+# `init` subcommand
+# ---------------------------------------------------------------------------
+
+
+def _cmd_init(args: argparse.Namespace) -> int:
     target: Path = args.base.expanduser().resolve() / args.project
 
     if not args.no_scaffold:
@@ -158,6 +188,31 @@ def _print_outro(target: Path, answers: dict[str, Any]) -> None:
             print(f"       - {q}")
     else:
         print("  3. Open a session with your Architect to draft Sprint 002.")
+    print(f"  4. When the planning is settled, run: socrates audit {target}")
     print()
     print("The handoff is a folder, not a conversation.")
     print()
+
+
+# ---------------------------------------------------------------------------
+# `audit` subcommand
+# ---------------------------------------------------------------------------
+
+
+def _cmd_audit(args: argparse.Namespace) -> int:
+    path: Path = args.path.expanduser().resolve()
+    if not path.is_dir():
+        print(f"error: {path} is not a directory", file=sys.stderr)
+        return 2
+
+    report = run_audit(path)
+    output = format_report(report, as_json=args.json)
+    print(output)
+
+    has_errors = any(f.severity is Severity.ERROR for f in report.findings)
+    has_warnings = any(f.severity is Severity.WARNING for f in report.findings)
+    if has_errors:
+        return 1
+    if has_warnings and args.strict:
+        return 1
+    return 0
