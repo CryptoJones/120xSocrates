@@ -7,7 +7,7 @@ Interactive CLI that interrogates you Socratic-style and fills out the planning 
 [![Codeberg](https://img.shields.io/badge/Codeberg-CryptoJones%2F120xSocrates-2185D0?logo=codeberg&logoColor=white)](https://codeberg.org/CryptoJones/120xSocrates)
 [![GitHub](https://img.shields.io/badge/GitHub-CryptoJones%2F120xSocrates-181717?logo=github&logoColor=white)](https://github.com/CryptoJones/120xSocrates)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-v0.2.0-orange)]()
+[![Version](https://img.shields.io/badge/version-v0.3.0-orange)]()
 
 > Mirrored on both [GitHub](https://github.com/CryptoJones/120xSocrates) and
 > [Codeberg](https://codeberg.org/CryptoJones/120xSocrates). Issues filed on
@@ -38,21 +38,41 @@ git clone https://github.com/CryptoJones/120xSocrates.git
 cd 120xSocrates
 pip install -e .
 
+# (optional) scaffold the macro layer once
+socrates companyos ~/Documents/120x
+
 # scaffold + interview a fresh project
-cd ~/Documents/120x-builds
+cd ~/Documents/120x/builds
 socrates init quarterly-rebates
 
-# later, verify the planning files stayed consistent
-socrates audit ./quarterly-rebates
-```
+# every working day, log what happened
+cd quarterly-rebates
+socrates journal
 
-Or run without installing:
+# verify the planning files stayed consistent (good in CI)
+socrates audit
 
-```bash
-python -m socrates120x init quarterly-rebates
+# generate a 60-second briefing for new collaborators
+socrates onboard
+
+# at the end of a sprint, capture a reusable pattern
+socrates extract
 ```
 
 ## Subcommands
+
+`socrates` ships six subcommands. They are designed to be composable —
+each one operates on a 120x folder produced by `socrates init` or
+`socrates companyos`.
+
+| Subcommand | One-liner |
+|---|---|
+| [`socrates init`](#socrates-init-slug--interview-a-new-project) | scaffold a project and interview the operator |
+| [`socrates audit`](#socrates-audit-path--verify-an-existing-project) | verify planning files for internal consistency |
+| [`socrates onboard`](#socrates-onboard-path--synthesize-welcomemd) | produce a 60-second WELCOME.md from existing planning files |
+| [`socrates journal`](#socrates-journal-path--append-only-daily-log) | open today's planning/journal/YYYY-MM-DD.md entry |
+| [`socrates extract`](#socrates-extract-path--capture-a-reusable-pattern) | sprint-close interview to capture a reusable pattern |
+| [`socrates companyos`](#socrates-companyos-path--scaffold-the-macro-layer) | scaffold the macro layer that wraps per-project builds |
 
 ### `socrates init <slug>` — interview a new project
 
@@ -97,6 +117,62 @@ The audit runs eight checks; each was chosen to be high-signal with **zero toler
 | `terminology-used` | INFO | a term defined in `DOMAIN.md` is not used anywhere else (dead-weight definition) |
 
 Exit codes: `0` clean (info-only is still clean), `1` errors present (or warnings with `--strict`), `2` invocation error.
+
+### `socrates onboard [path]` — synthesize WELCOME.md
+
+Reads the existing planning files (STATE / DECISIONS / RISKS / QUESTIONS) and writes a one-minute briefing as `WELCOME.md` in the project root. **Pure synthesis** — no interview, no LLM, no third-party calls. Designed for the case where a new collaborator (human or agent) walks in cold.
+
+```bash
+socrates onboard                       # write WELCOME.md in cwd
+socrates onboard ./quarterly-rebates   # write into a specific project
+socrates onboard . --stdout            # print to stdout instead of writing
+```
+
+The synthesized WELCOME.md contains:
+
+- Project tagline, client, tech stack
+- Active sprint, current status, next action
+- The 3 most load-bearing decisions, 3 explicitly out-of-scope items
+- The 3 most prominent risks and open questions
+- A pointer to the active sprint folder and the three files to read next
+
+The output is auto-generated. Re-run `socrates onboard` whenever planning state shifts.
+
+### `socrates journal [path]` — append-only daily log
+
+Creates today's `planning/journal/YYYY-MM-DD.md` entry (with a short template) and opens `$EDITOR` so you can fill it in. The journal **complements** `STATE.md`: STATE is the rolling snapshot, journal entries are immutable historical fragments.
+
+```bash
+socrates journal                       # create + open today's entry
+socrates journal --show                # print the latest entry
+socrates journal --list                # list all entries, oldest first
+```
+
+When you find yourself wondering "what changed between sprints 003 and 005?", this folder is the answer.
+
+### `socrates extract [path]` — capture a reusable pattern
+
+A sprint-close interview that walks the operator through capturing one reusable pattern from the project that just shipped. The 120x methodology promises three deliverables (the shipped system, the preserved blueprint, and **the extracted pattern**); the third is the one most often skipped.
+
+```bash
+socrates extract                       # interview, write patterns/CANDIDATE-<slug>.md
+socrates extract --editor              # open $EDITOR for the pattern body (recommended)
+socrates extract --patterns-dir ../patterns/   # explicit target
+```
+
+Auto-detection: if the project sits inside a CompanyOS layout (`builds/<project>/`), the pattern is written to the sibling `patterns/` directory so it lives at the macro level where it can compound across projects. Otherwise a local `patterns/` directory inside the project is used.
+
+Pattern files are named `CANDIDATE-<slug>.md`. Promote a candidate to a real pattern by dropping the `CANDIDATE-` prefix **only after** it has worked on at least one additional project.
+
+### `socrates companyos <path>` — scaffold the macro layer
+
+Creates the CompanyOS skeleton: `clients/`, `builds/`, `pipeline/`, `patterns/`, `content/`, `reference/`, `daily/`, `templates/`, plus an `AGENTS.md` router that points each subfolder at its role.
+
+```bash
+socrates companyos ~/Documents/120x
+```
+
+Per the 120x philosophy, the CompanyOS is the macro operating system that wraps every per-project build. Per-project state lives in `builds/<project>/`; long-lived assets (extracted patterns, client context, pipeline notes) live at the CompanyOS root. Use this once when setting up the factory; thereafter `socrates init builds/<slug>` from inside it.
 
 ## How the `init` interview is structured
 

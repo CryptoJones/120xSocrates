@@ -188,6 +188,7 @@ class Interview:
     answers: dict[str, Any] = field(default_factory=dict)
     resume: bool = False
     editor: bool = False
+    questions: tuple[Question, ...] = field(default_factory=lambda: QUESTIONS)
 
     def load(self) -> None:
         if self.answers_path.exists() and self.resume:
@@ -204,9 +205,9 @@ class Interview:
     ) -> None:
         self.load()
         self.answers.setdefault("project_name", self.project_name)
-        total = len(QUESTIONS)
+        total = len(self.questions)
         current_section: str | None = None
-        for i, q in enumerate(QUESTIONS, start=1):
+        for i, q in enumerate(self.questions, start=1):
             if q.section != current_section:
                 _print_section_banner(q.section, output_fn)
                 current_section = q.section

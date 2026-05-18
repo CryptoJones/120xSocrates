@@ -16,7 +16,11 @@ from typing import Any
 from socrates120x import __version__
 from socrates120x.audit import format_report, run_audit
 from socrates120x.audit.model import Severity
+from socrates120x.companyos import scaffold_companyos
+from socrates120x.extract import run_extract
 from socrates120x.interview import Interview, is_interactive
+from socrates120x.journal import create_or_open_entry
+from socrates120x.onboard import synthesize_welcome, write_welcome
 from socrates120x.render import render_all
 from socrates120x.scaffold import scaffold
 
@@ -65,6 +69,90 @@ def main(argv: list[str] | None = None) -> int:
         help="For multi-line questions, open $EDITOR instead of prompting line-by-line.",
     )
 
+    onboard = sub.add_parser(
+        "onboard",
+        help="Synthesize a 60-second WELCOME.md from the existing planning files.",
+        description=(
+            "Read STATE / DECISIONS / RISKS / QUESTIONS and write a WELCOME.md "
+            "in the project root. Pure synthesis — no interview. Designed for "
+            "new humans or agents who need a one-minute briefing."
+        ),
+    )
+    onboard.add_argument(
+        "path", nargs="?", type=Path, default=Path.cwd(),
+        help="Project folder. Default: current working directory.",
+    )
+    onboard.add_argument(
+        "--stdout", action="store_true",
+        help="Print the synthesized briefing to stdout instead of writing WELCOME.md.",
+    )
+
+    extract = sub.add_parser(
+        "extract",
+        help="Sprint-close interview: capture a reusable pattern from this project.",
+        description=(
+            "Walk through 9 questions to extract one reusable pattern from the "
+            "sprint that just shipped, then write it as patterns/CANDIDATE-<slug>.md. "
+            "Run this at the end of every sprint or project — the third deliverable "
+            "the 120x methodology promises is the one most often skipped."
+        ),
+    )
+    extract.add_argument(
+        "path", nargs="?", type=Path, default=Path.cwd(),
+        help="Project folder. Default: current working directory.",
+    )
+    extract.add_argument(
+        "--patterns-dir", type=Path, default=None,
+        help=(
+            "Where to write the pattern file. Default: auto-detect (sibling "
+            "patterns/ if inside a CompanyOS, else project-local patterns/)."
+        ),
+    )
+    extract.add_argument(
+        "--resume", action="store_true",
+        help="Resume a partial extraction from .socrates-extract-answers.json.",
+    )
+    extract.add_argument(
+        "--editor", action="store_true",
+        help="Use $EDITOR for multi-line answers (recommended for the pattern body).",
+    )
+
+    companyos = sub.add_parser(
+        "companyos",
+        help="Scaffold a CompanyOS macro layer (the wrapper around per-project builds).",
+        description=(
+            "Create the 120x macro layer at the given path: clients/, builds/, "
+            "patterns/, pipeline/, content/, reference/, daily/, templates/. "
+            "This is the wrapper around per-project builds — the 'factory', not the 'house'."
+        ),
+    )
+    companyos.add_argument(
+        "path", type=Path,
+        help="Directory to scaffold the CompanyOS into (created if missing).",
+    )
+
+    journal = sub.add_parser(
+        "journal",
+        help="Create or open today's planning/journal/YYYY-MM-DD.md entry.",
+        description=(
+            "Open today's journal entry in $EDITOR. Creates the file with a "
+            "short template if it does not yet exist. Use --show to print the "
+            "latest entry, --list to list every entry."
+        ),
+    )
+    journal.add_argument(
+        "path", nargs="?", type=Path, default=Path.cwd(),
+        help="Project folder. Default: current working directory.",
+    )
+    journal.add_argument(
+        "--show", action="store_true",
+        help="Print the latest journal entry to stdout instead of editing.",
+    )
+    journal.add_argument(
+        "--list", action="store_true", dest="list_all",
+        help="List all journal entries, oldest first.",
+    )
+
     audit = sub.add_parser(
         "audit",
         help="Verify the planning files of a 120x project for internal consistency.",
@@ -91,6 +179,14 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_init(args)
     if args.command == "audit":
         return _cmd_audit(args)
+    if args.command == "journal":
+        return _cmd_journal(args)
+    if args.command == "companyos":
+        return _cmd_companyos(args)
+    if args.command == "extract":
+        return _cmd_extract(args)
+    if args.command == "onboard":
+        return _cmd_onboard(args)
     parser.error(f"unknown command: {args.command}")
     return 2  # pragma: no cover
 
@@ -197,6 +293,64 @@ def _print_outro(target: Path, answers: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # `audit` subcommand
 # ---------------------------------------------------------------------------
+
+
+def _cmd_onboard(args: argparse.Namespace) -> int:
+    project: Path = args.path.expanduser().resolve()
+    if not project.is_dir():
+        print(f"error: {project} is not a directory", file=sys.stderr)
+        return 2
+    if args.stdout:
+        print(synthesize_welcome(project))
+        return 0
+    target = write_welcome(project)
+    print(f"Wrote {target}")
+    return 0
+
+
+def _cmd_extract(args: argparse.Namespace) -> int:
+    project: Path = args.path.expanduser().resolve()
+    if not project.is_dir():
+        print(f"error: {project} is not a directory", file=sys.stderr)
+        return 2
+    if not is_interactive():
+        print(
+            "error: socrates extract needs a TTY for the interview.",
+            file=sys.stderr,
+        )
+        return 2
+    code, _ = run_extract(
+        project,
+        patterns_dir=args.patterns_dir,
+        resume=args.resume,
+        editor=args.editor,
+    )
+    return code
+
+
+def _cmd_companyos(args: argparse.Namespace) -> int:
+    target: Path = args.path.expanduser().resolve()
+    try:
+        written = scaffold_companyos(target)
+    except FileExistsError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    print(f"Scaffolded CompanyOS at: {target}")
+    print(f"  Wrote {len(written)} files across {len(set(p.parent for p in written))} folders.")
+    print()
+    print("Next steps:")
+    print(f"  1. cd {target}")
+    print("  2. Read AGENTS.md.")
+    print("  3. From here, start projects with: socrates init builds/<project-slug>")
+    return 0
+
+
+def _cmd_journal(args: argparse.Namespace) -> int:
+    path: Path = args.path.expanduser().resolve()
+    if not path.is_dir():
+        print(f"error: {path} is not a directory", file=sys.stderr)
+        return 2
+    return create_or_open_entry(path, show=args.show, list_all=args.list_all)
 
 
 def _cmd_audit(args: argparse.Namespace) -> int:

@@ -26,6 +26,7 @@ def render_all(target: Path, answers: dict[str, Any]) -> list[Path]:
         "planning/RISKS.md": _risks_md(ctx),
         "planning/QUESTIONS.md": _questions_md(ctx),
         "planning/FILE_INVENTORY.md": _file_inventory_md(ctx),
+        "planning/journal/README.md": _journal_readme(),
         "planning/sprints/001-discovery-architecture/requirements.md": _sprint1_requirements(ctx),
         "planning/sprints/001-discovery-architecture/blueprint.md": _sprint1_blueprint(ctx),
         "planning/sprints/001-discovery-architecture/acceptance.md": _sprint1_acceptance(ctx),
@@ -463,6 +464,37 @@ Do not start implementation until I approve your summary. If anything in the
 planning files contradicts itself, or is ambiguous, ADD a line to
 planning/QUESTIONS.md and stop. Do not guess.
 ```
+"""
+
+
+def _journal_readme() -> str:
+    return """# journal/
+
+Append-only daily / weekly log. **Complements** `STATE.md` — does not replace it.
+
+- `STATE.md` is the *current* moment — edited in place.
+- `journal/YYYY-MM-DD.md` is *what happened* on that date — never edited later.
+
+When you find yourself wondering "what changed between sprints 003 and 005?", this folder is the answer. `git log` is too noisy; STATE.md only holds the latest snapshot. The journal is the middle ground.
+
+## Create today's entry
+
+```bash
+socrates journal
+```
+
+That creates `journal/YYYY-MM-DD.md` (with a short template) and opens it in `$EDITOR`. Save & quit to commit the entry.
+
+## What to write
+
+One short entry per working day, freeform. Things worth recording:
+
+- What you decided that did not yet make it to `DECISIONS.md`.
+- What surprised you (those become tomorrow's risks).
+- What the client said in a call.
+- What you tried that did not work — and why.
+
+Future builders (human or agent) will read these in order. Optimize for skim-ability, not completeness.
 """
 
 

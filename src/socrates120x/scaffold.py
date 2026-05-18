@@ -10,6 +10,7 @@ from pathlib import Path
 DIRS: tuple[str, ...] = (
     "docs",
     "planning",
+    "planning/journal",
     "planning/meetings",
     "planning/sprints/001-discovery-architecture",
     "src",
@@ -37,6 +38,7 @@ FILES: tuple[str, ...] = (
     "planning/RISKS.md",
     "planning/QUESTIONS.md",
     "planning/FILE_INVENTORY.md",
+    "planning/journal/README.md",
     "planning/meetings/README.md",
     "planning/sprints/001-discovery-architecture/requirements.md",
     "planning/sprints/001-discovery-architecture/blueprint.md",
