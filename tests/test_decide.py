@@ -79,6 +79,25 @@ def test_decide_errors_when_no_decisions_md(tmp_path: Path) -> None:
     assert code == 2
 
 
+def test_decide_collapses_internal_whitespace_to_keep_bullet_single_line(
+    project: Path,
+) -> None:
+    """A multi-line decision text would otherwise leave the closing `**`
+    on a different line, breaking the markdown bullet. Collapse all
+    runs of whitespace to a single space."""
+    code = record_decision(
+        project,
+        "first line\n  second line\t\twith tabs\n\n\nthird line",
+    )
+    assert code == 0
+    body = (project / "planning" / "DECISIONS.md").read_text()
+    today = _dt.date.today().isoformat()
+    expected_bullet = f"- **first line second line with tabs third line ({today})**"
+    assert expected_bullet in body
+    # And the literal multi-line form must NOT appear:
+    assert "\n  second line" not in body
+
+
 def test_decide_timeline_picks_up_new_decision(project: Path) -> None:
     """End-to-end: the date stamp `socrates decide` writes is the one
     `socrates timeline` reads."""
