@@ -85,3 +85,50 @@ def test_format_timeline_renders_events(project: Path) -> None:
     text = format_timeline(events, use_color=False)
     assert yesterday.isoformat() in text
     assert "[journal]" in text
+
+
+def test_decision_with_user_date_in_body_uses_trailing_recording_date(
+    project: Path,
+) -> None:
+    """User decision text can mention a date in parens (e.g. a deadline).
+    The PREVIOUS unanchored regex took the FIRST date in the line, which
+    was the user's date, not the date the decision was recorded. Anchor
+    to the trailing `)**` so the recording date wins."""
+    decisions = project / "planning" / "DECISIONS.md"
+    decisions.write_text(
+        decisions.read_text()
+        + "\n\n## Decisions added after init\n\n"
+        + "- **Migrate by (2024-12-31) for compliance (2026-05-20)**\n"
+    )
+    events = build_timeline(project)
+    decision_events = [e for e in events if e.kind is EventKind.DECISION]
+    # The decision must be dated 2026-05-20 (the recording date),
+    # NOT 2024-12-31 (the user's deadline date inside the bullet text).
+    matching = [e for e in decision_events if "Migrate by" in e.title]
+    assert matching, "decision was not detected at all"
+    assert matching[0].date == _dt.date(2026, 5, 20), (
+        f"expected recording date 2026-05-20; got {matching[0].date} — "
+        f"likely picked the user-typed (2024-12-31) at the front of the line"
+    )
+    # The user's date in the body should be preserved in the rendered title
+    # (we only strip the trailing recording stamp).
+    assert "2024-12-31" in matching[0].title
+
+
+def test_decision_with_no_trailing_stamp_falls_back_to_any_date(
+    project: Path,
+) -> None:
+    """Pre-fix files / hand-edited bullets may have just `(YYYY-MM-DD)`
+    somewhere in the line with no closing `**`. Still detect them via
+    the unanchored fallback."""
+    decisions = project / "planning" / "DECISIONS.md"
+    decisions.write_text(
+        decisions.read_text()
+        + "\n\n## Decisions added after init\n\n"
+        + "- legacy bullet style (2025-03-15)\n"
+    )
+    events = build_timeline(project)
+    decision_events = [e for e in events if e.kind is EventKind.DECISION]
+    matching = [e for e in decision_events if "legacy bullet" in e.title]
+    assert matching
+    assert matching[0].date == _dt.date(2025, 3, 15)
