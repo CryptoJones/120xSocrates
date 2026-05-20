@@ -23,6 +23,13 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.4",
     "mypy>=1.9",
+    "markdown>=3.5",  # exercised by --format html tests
+]
+html = [
+    # Required by `socrates pack --format html`. Optional because the
+    # default markdown pack format is pure-stdlib; users who never run
+    # the HTML format shouldn't have to install anything extra.
+    "markdown>=3.5",
 ]
 
 [project.scripts]

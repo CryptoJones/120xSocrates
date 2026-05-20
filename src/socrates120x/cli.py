@@ -140,6 +140,17 @@ def main(argv: list[str] | None = None) -> int:
             "embedded in the pack. Falls back to the $SOCRATES_KIT_PATH env var."
         ),
     )
+    pack.add_argument(
+        "--format", choices=("md", "html", "xml"), default="md",
+        dest="pack_format",
+        help=(
+            "Output format. `md` (default) is plain markdown — the historical "
+            "behavior. `xml` wraps markdown bodies in <section> tags, matching "
+            "Anthropic's prompt-engineering recommendation for structural "
+            "delimitation. `html` produces full HTML (requires the optional "
+            "`markdown` package: `pip install socrates120x[html]`)."
+        ),
+    )
 
     patterns = sub.add_parser(
         "patterns",
@@ -489,11 +500,17 @@ def _cmd_pack(args: argparse.Namespace) -> int:
         "include_sprint": args.sprint,
         "include_philosophy": args.include_philosophy,
         "kit_path": args.kit_path,
+        "format": args.pack_format,
     }
-    if args.stdout:
-        print(build_pack(project, **kwargs))
-        return 0
-    target = write_pack(project, **kwargs)
+    try:
+        if args.stdout:
+            print(build_pack(project, **kwargs))
+            return 0
+        target = write_pack(project, **kwargs)
+    except RuntimeError as exc:
+        # Raised by --format html when the `markdown` package is missing.
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     print(f"Wrote {target}")
     return 0
 
