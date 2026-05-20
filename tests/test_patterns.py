@@ -266,3 +266,81 @@ def test_cache_rejects_old_version(company: Path) -> None:
     refreshed = json.loads(cache_path.read_text())
     assert refreshed["version"] == 2
     assert "phantom-from-v1" not in str(refreshed)
+
+
+def test_patterns_review_no_false_positive_on_short_slug_substring(company: Path) -> None:
+    """A pattern slug like `auth` must NOT match `author` in another project.
+
+    Bug: previous naive substring match `auth in author` -> True -> the
+    pattern was reported as 'used elsewhere' and never flagged as unused,
+    silently masking genuinely unused short-slug patterns.
+    """
+    alpha = _make_build(company, "alpha")
+    beta = _make_build(company, "beta")
+    # alpha (source) mentions the slug somewhere — establishes the source.
+    (alpha / "planning" / "STATE.md").write_text(
+        (alpha / "planning" / "STATE.md").read_text() + "\nThe `auth` pattern.\n"
+    )
+    # beta mentions `author` (longer word containing `auth`). Pre-fix this
+    # would have looked like a usage of the `auth` slug and the pattern
+    # would NOT have been flagged unused.
+    (beta / "planning" / "STATE.md").write_text(
+        (beta / "planning" / "STATE.md").read_text()
+        + "\nThe author of this is unknown.\n"
+    )
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-auth.md").write_text(
+        _pattern(today, "alpha", "auth")
+    )
+    report = review_patterns(company)
+    unused = [f for f in report.findings if f.kind == FindingKind.UNUSED]
+    # The pattern IS unused; substring-into-`author` should not save it.
+    assert any("auth" in f.path.name for f in unused), (
+        "regression: short slug 'auth' was matched as a substring of 'author'"
+    )
+
+
+def test_patterns_review_no_false_positive_on_kebab_subset(company: Path) -> None:
+    """A pattern slug `validate-numbers` must NOT match `validate-numbers-attempt`
+    (a longer kebab-case identifier that happens to start with the slug).
+    """
+    alpha = _make_build(company, "alpha")
+    beta = _make_build(company, "beta")
+    (alpha / "planning" / "STATE.md").write_text(
+        (alpha / "planning" / "STATE.md").read_text()
+        + "\nThe `validate-numbers` pattern was extracted here.\n"
+    )
+    # beta has a DIFFERENT kebab identifier that contains the slug as a prefix.
+    (beta / "planning" / "STATE.md").write_text(
+        (beta / "planning" / "STATE.md").read_text()
+        + "\nWe tried validate-numbers-attempt instead, see #42.\n"
+    )
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-validate-numbers.md").write_text(
+        _pattern(today, "alpha", "validate-numbers")
+    )
+    report = review_patterns(company)
+    unused = [f for f in report.findings if f.kind == FindingKind.UNUSED]
+    assert any("validate-numbers" in f.path.name for f in unused), (
+        "regression: kebab slug matched as prefix of a longer kebab identifier"
+    )
+
+
+def test_patterns_review_still_matches_exact_kebab_slug(company: Path) -> None:
+    """Positive control: an exact slug mention in another project still counts."""
+    alpha = _make_build(company, "alpha")
+    beta = _make_build(company, "beta")
+    (alpha / "planning" / "STATE.md").write_text(
+        (alpha / "planning" / "STATE.md").read_text() + "\nThe `validate-numbers` pattern.\n"
+    )
+    (beta / "planning" / "STATE.md").write_text(
+        (beta / "planning" / "STATE.md").read_text()
+        + "\nWe reused validate-numbers from alpha.\n"
+    )
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-validate-numbers.md").write_text(
+        _pattern(today, "alpha", "validate-numbers")
+    )
+    report = review_patterns(company)
+    unused_paths = [f.path.name for f in report.findings if f.kind == FindingKind.UNUSED]
+    assert "CANDIDATE-validate-numbers.md" not in unused_paths
