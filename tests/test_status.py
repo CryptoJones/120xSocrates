@@ -86,3 +86,48 @@ def test_format_status_renders_table(company: Path) -> None:
 def test_format_status_empty_input() -> None:
     text = format_status([], use_color=False)
     assert "no project" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# has_extract correctness (bugfix/status-extract-strict-source-match)
+# ---------------------------------------------------------------------------
+
+
+def test_has_extract_true_when_pattern_source_matches(company: Path) -> None:
+    _populate_build(company / "builds", "alpha")
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        "# Pattern: x\n\n"
+        "| | |\n|---|---|\n"
+        "| **Source project** | `alpha` |\n",
+        encoding="utf-8",
+    )
+    rows = companyos_status(company)
+    by_name = {r.name: r for r in rows}
+    assert by_name["alpha"].has_extract is True
+
+
+def test_has_extract_false_when_only_mentioned_in_war_story(company: Path) -> None:
+    """Bug: previous loose `` `name` `` substring match would mark `alpha`
+    as extracted just because pattern `y` (sourced from beta) mentioned
+    `` `alpha` `` in its war story / 'see also' section. Now only the
+    explicit Source-project line counts.
+    """
+    _populate_build(company / "builds", "alpha")
+    _populate_build(company / "builds", "beta")
+    # Pattern y is SOURCED FROM beta but mentions alpha in body content.
+    (company / "patterns" / "CANDIDATE-y.md").write_text(
+        "# Pattern: y\n\n"
+        "| | |\n|---|---|\n"
+        "| **Source project** | `beta` |\n\n"
+        "## War story\n\nSimilar trick once worked on `alpha`; see that project.\n",
+        encoding="utf-8",
+    )
+    rows = companyos_status(company)
+    by_name = {r.name: r for r in rows}
+    # beta IS extracted (it's the actual source).
+    assert by_name["beta"].has_extract is True
+    # alpha is NOT extracted — the only mention is in beta's war story.
+    assert by_name["alpha"].has_extract is False, (
+        "regression: status falsely reports `alpha` as extracted because "
+        "a different pattern's war story mentioned it in backticks"
+    )
