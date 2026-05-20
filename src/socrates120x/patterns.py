@@ -212,13 +212,35 @@ def _compute_usage_map(
 
 
 def _slug_in_project(slug: str, project_dir: Path) -> bool:
+    """True if *slug* appears as a complete token in any .md file under
+    *project_dir*.
+
+    Naive substring match (the previous implementation) false-positived on
+    short slugs: ``auth`` matched ``author`` / ``authentic`` / ``authority``,
+    ``api`` matched ``apiary`` / ``rapidly``. The "unused candidate" report
+    silently hid genuine unused patterns whenever such a short slug
+    happened to be substring of a real word in any project's planning
+    files.
+
+    Word-boundary regex with custom boundary chars (``\\w`` plus ``-``)
+    handles kebab-case slugs correctly: ``validate-numbers`` won't match
+    inside ``validate-numbers-attempt`` (longer kebab identifier), and
+    ``auth`` won't match inside ``author``.
+    """
     needle = slug.lower()
+    # (?<![\w-]) — not preceded by a word char or dash
+    # (?![\w-])  — not followed by a word char or dash
+    # re.escape protects against any regex metacharacters in slug names.
+    pattern = re.compile(
+        rf"(?<![\w-]){re.escape(needle)}(?![\w-])",
+        flags=re.IGNORECASE,
+    )
     for f in project_dir.rglob("*.md"):
         try:
-            text = f.read_text(errors="replace").lower()
+            text = f.read_text(errors="replace")
         except OSError:
             continue
-        if needle in text:
+        if pattern.search(text):
             return True
     return False
 
