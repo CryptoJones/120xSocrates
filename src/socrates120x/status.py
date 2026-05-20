@@ -197,7 +197,18 @@ def _latest_journal_age_days(project: Path) -> int | None:
 
 
 def _has_extract(project: Path) -> bool:
-    """A project has been "extracted" if any pattern candidate references it."""
+    """A project has been "extracted" if any pattern candidate references it.
+
+    Two prior bugs fixed here:
+    - Each pattern file was read TWICE (once per substring check). On a
+      CompanyOS with N projects and M patterns, status() became O(N*M)
+      file reads. Read once, check both patterns against the same text.
+    - The fallback ``f"\\`{project.name}\\`" in text`` matched any backtick
+      mention of the project — a war story in pattern P that says
+      ``see \\`other-project\\` for context`` would falsely mark
+      other-project as having an extract. Drop the loose fallback; only
+      the explicit ``Source project | \\`name\\``` line is authoritative.
+    """
     # 1) Local patterns/ dir with CANDIDATE-*.md.
     local = project / "patterns"
     if local.is_dir() and any(local.glob("CANDIDATE-*.md")):
@@ -207,10 +218,17 @@ def _has_extract(project: Path) -> bool:
     if parent.name == "builds":
         sibling = parent.parent / "patterns"
         if sibling.is_dir():
+            source_marker = f"Source project** | `{project.name}`"
+            # Tolerate both pattern emitters' formats (markdown table cell
+            # may or may not have the ** around the label depending on
+            # render version).
+            source_marker_alt = f"Source project | `{project.name}`"
             for f in sibling.glob("CANDIDATE-*.md"):
-                if f"Source project | `{project.name}`" in f.read_text(errors="replace"):
-                    return True
-                if f"`{project.name}`" in f.read_text(errors="replace"):
+                try:
+                    text = f.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                if source_marker in text or source_marker_alt in text:
                     return True
     # 3) Or has an in-progress extract answers file.
     return (project / ".socrates-extract-answers.json").is_file()
