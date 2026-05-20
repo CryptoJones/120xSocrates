@@ -11,7 +11,10 @@ Reusing this class with a different `questions` tuple drives `extract`.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -28,6 +31,31 @@ from socrates120x.prompting import (
 )
 
 __all__ = ["Interview", "Question", "QUESTIONS", "is_interactive"]
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write *text* to *path* via a same-directory tempfile + rename.
+
+    A naked path.write_text() opens, truncates, and writes — if the process
+    is killed mid-write (Ctrl-C, OOM, power loss) the file is left
+    truncated or partially written, which then breaks the next
+    `socrates init --resume` with a JSONDecodeError stacktrace.
+    Tempfile + rename is atomic on POSIX (and on Windows since Python 3.3
+    via os.replace) so the file on disk is either the old contents or
+    the new contents — never half-and-half.
+    """
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(text)
+        # os.replace is atomic across filesystems on the same device; if the
+        # tempfile lives in the same dir as the target (which it does here),
+        # we're always on the same device.
+        os.replace(tmp, path)
+    finally:
+        # If anything went wrong, leave a clean directory — don't strand the
+        # tempfile for the next run to wonder about.
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
 
 
 # The full init interview. Order matters — earlier answers prime the user for
@@ -193,11 +221,33 @@ class Interview:
     questions: tuple[Question, ...] = field(default_factory=lambda: QUESTIONS)
 
     def load(self) -> None:
-        if self.answers_path.exists() and self.resume:
+        """Load answers from disk if --resume was passed.
+
+        A previous run that was killed mid-save could have left a corrupted
+        file. Instead of blowing up with a JSONDecodeError stacktrace, warn
+        the operator and start fresh — they'd have to re-answer questions
+        either way, and the alternative is unrecoverable from the CLI.
+        """
+        if not (self.answers_path.exists() and self.resume):
+            return
+        try:
             self.answers = json.loads(self.answers_path.read_text())
+        except (json.JSONDecodeError, OSError) as e:
+            print(
+                f"warning: could not read {self.answers_path}: {e}\n"
+                f"  Starting interview from scratch. The corrupt file will be "
+                f"overwritten on the first answer.",
+                file=sys.stderr,
+            )
+            self.answers = {}
 
     def save(self) -> None:
-        self.answers_path.write_text(json.dumps(self.answers, indent=2) + "\n")
+        # Atomic write — see _atomic_write_text. Without this, Ctrl-C during
+        # save() leaves a truncated file that crashes the next --resume.
+        _atomic_write_text(
+            self.answers_path,
+            json.dumps(self.answers, indent=2) + "\n",
+        )
 
     def run(
         self,
