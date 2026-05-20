@@ -631,7 +631,10 @@ def _cmd_companyos(args: argparse.Namespace) -> int:
     target: Path = args.path.expanduser().resolve()
     try:
         written = scaffold_companyos(target)
-    except FileExistsError as e:
+    except (FileExistsError, NotADirectoryError) as e:
+        # scaffold_companyos can now raise NotADirectoryError when the
+        # target exists as a regular file. Catch it here so the CLI
+        # surfaces a clean error instead of a Python stacktrace.
         print(f"error: {e}", file=sys.stderr)
         return 2
     print(f"Scaffolded CompanyOS at: {target}")
