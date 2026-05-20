@@ -129,7 +129,18 @@ def _sprint_events(project: Path) -> list[TimelineEvent]:
     return events
 
 
-_DATED_DECISION = re.compile(r"\((\d{4}-\d{2}-\d{2})\)")
+# The date stamp `socrates decide` and `_decisions_md` both emit is
+# anchored at the END of the bullet, immediately before the closing
+# `**` and optional trailing whitespace. Anchoring here prevents a
+# user-typed date in the decision body (e.g. "Migrate by (2024-12-31)
+# (2026-05-20)") from being misread as the recording date — the
+# previous unanchored `\((\d{4}-\d{2}-\d{2})\)` regex took the FIRST
+# match in the line.
+_DATED_DECISION_END = re.compile(r"\((\d{4}-\d{2}-\d{2})\)\*{0,2}\s*$")
+# Fallback: any (YYYY-MM-DD) anywhere in the line, in case the line
+# does NOT end in the canonical `)**` (older files, hand-edited
+# bullets). Used only if the anchored match fails.
+_DATED_DECISION_ANY = re.compile(r"\((\d{4}-\d{2}-\d{2})\)")
 
 
 def _decision_events(project: Path) -> list[TimelineEvent]:
@@ -141,7 +152,7 @@ def _decision_events(project: Path) -> list[TimelineEvent]:
         stripped = line.lstrip()
         if not stripped.startswith("- "):
             continue
-        m = _DATED_DECISION.search(stripped)
+        m = _DATED_DECISION_END.search(stripped) or _DATED_DECISION_ANY.search(stripped)
         if not m:
             continue
         try:
@@ -149,7 +160,9 @@ def _decision_events(project: Path) -> list[TimelineEvent]:
         except ValueError:
             continue
         content = stripped[2:]  # strip "- "
-        content = _DATED_DECISION.sub("", content).strip()
+        # Strip ONLY the trailing date stamp (anchored) so dates that appear
+        # in the body are preserved in the rendered timeline entry.
+        content = _DATED_DECISION_END.sub("", content).strip()
         content = content.strip("*").strip()
         events.append(TimelineEvent(
             date=d,
