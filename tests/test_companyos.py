@@ -63,3 +63,19 @@ def test_companyos_rejects_file_target(tmp_path) -> None:
     with pytest.raises(NotADirectoryError, match="regular file"):
         scaffold_companyos(file_path)
     assert file_path.read_text(encoding="utf-8") == "operator's notes"
+
+
+def test_cli_companyos_handles_file_target_gracefully(tmp_path, capsys) -> None:
+    """CLI entry point must catch NotADirectoryError too, not just FileExistsError.
+    Pre-fix the new validation in scaffold_companyos crashed the CLI with a
+    stacktrace because _cmd_companyos only caught FileExistsError."""
+    from socrates120x.cli import main
+
+    file_path = tmp_path / "operators-notes.txt"
+    file_path.write_text("user content", encoding="utf-8")
+    rc = main(["companyos", str(file_path)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "error:" in err
+    # The actual file content is untouched.
+    assert file_path.read_text(encoding="utf-8") == "user content"
