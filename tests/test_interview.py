@@ -120,3 +120,94 @@ def test_editor_mode_uses_subprocess(tmp_path: Path) -> None:
 
     # business_goal is a multiline required question — should have come from the editor.
     assert iv.answers["business_goal"] == "real answer line one\nreal answer line two"
+
+
+# ---------------------------------------------------------------------------
+# Atomic save + corrupted resume recovery (reliability/interview-atomic-save)
+# ---------------------------------------------------------------------------
+
+
+def test_save_is_atomic_no_tempfile_left_behind(tmp_path: Path) -> None:
+    """save() must not leave behind the .tmp file used for the atomic rename."""
+    iv = Interview(answers_path=tmp_path / "answers.json", project_name="p")
+    iv.answers = {"k": "v"}
+    iv.save()
+    assert (tmp_path / "answers.json").exists()
+    assert not (tmp_path / "answers.json.tmp").exists()
+
+
+def test_save_does_not_leave_partial_file_on_failure(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """If the rename step fails, the final file should not exist in a partial
+    state. (The tempfile may exist but the target should be untouched.)"""
+    answers_path = tmp_path / "answers.json"
+    # Seed with a known good file.
+    answers_path.write_text('{"old": "value"}\n')
+
+    iv = Interview(answers_path=answers_path, project_name="p")
+    iv.answers = {"new": "value"}
+
+    # Make os.replace fail so we hit the cleanup path.
+    import socrates120x.interview as iv_mod
+    real_replace = iv_mod.os.replace
+    def boom(src: object, dst: object) -> None:
+        raise OSError("simulated replace failure")
+    monkeypatch.setattr(iv_mod.os, "replace", boom)
+
+    import contextlib  # noqa: PLC0415
+    with contextlib.suppress(OSError):
+        iv.save()  # expected to fail at the rename; verify state AFTER
+
+    # The pre-existing file must NOT have been clobbered by the failed save.
+    assert answers_path.read_text() == '{"old": "value"}\n'
+    # And no tempfile should be left behind to confuse the next run.
+    assert not (tmp_path / "answers.json.tmp").exists()
+    # Restore (paranoia).
+    monkeypatch.setattr(iv_mod.os, "replace", real_replace)
+
+
+def test_resume_with_corrupt_answers_file_warns_and_starts_fresh(
+    tmp_path: Path, capsys: Any
+) -> None:
+    """A previous Ctrl-C during save could have left a truncated/invalid
+    JSON file. Re-running with --resume must warn and start fresh
+    instead of crashing with JSONDecodeError."""
+    answers_path = tmp_path / "answers.json"
+    # Simulate a half-written file (the kind a SIGINT mid-write would leave).
+    answers_path.write_text('{"k": "v"')  # missing closing brace
+
+    iv = Interview(
+        answers_path=answers_path,
+        project_name="recoverable",
+        resume=True,
+    )
+    iv.load()  # should NOT raise
+    err = capsys.readouterr().err
+    assert "warning" in err.lower()
+    assert "answers.json" in err
+    # And answers should be empty so the interview can proceed from scratch.
+    assert iv.answers == {}
+
+
+def test_resume_with_unreadable_answers_file_warns_and_starts_fresh(
+    tmp_path: Path, capsys: Any, monkeypatch: Any
+) -> None:
+    """An OSError on read (e.g., permission denied) should also warn rather
+    than crash."""
+    answers_path = tmp_path / "answers.json"
+    answers_path.write_text('{"k": "v"}')
+
+    # Monkeypatch read_text to raise OSError to simulate permission denied.
+    real_read = Path.read_text
+    def boom(self: Path, *a: object, **kw: object) -> str:
+        if self == answers_path:
+            raise OSError("simulated permission denied")
+        return real_read(self, *a, **kw)
+    monkeypatch.setattr(Path, "read_text", boom)
+
+    iv = Interview(answers_path=answers_path, project_name="p", resume=True)
+    iv.load()  # should NOT raise
+    err = capsys.readouterr().err
+    assert "warning" in err.lower()
+    assert iv.answers == {}
