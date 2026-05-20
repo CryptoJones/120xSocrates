@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.pack import build_pack, write_pack
+from socrates120x.pack import (
+    SUPPORTED_FORMATS,
+    build_pack,
+    write_pack,
+)
 from socrates120x.render import render_all
 from socrates120x.scaffold import scaffold
 
@@ -137,3 +141,131 @@ def test_pack_philosophy_and_kit_can_combine(project: Path, tmp_path: Path) -> N
     text = build_pack(project, include_philosophy=True, kit_path=kit)
     assert "120x Architect / Builder stance" in text  # socrates preamble
     assert "Kit philosophy" in text  # kit file
+
+
+# ---------------------------------------------------------------------------
+# --format md|html|xml
+# ---------------------------------------------------------------------------
+
+
+def test_supported_formats_constant() -> None:
+    # Guard against accidental drift between the constant and the CLI choices.
+    assert SUPPORTED_FORMATS == ("md", "html", "xml")
+
+
+def test_pack_rejects_unknown_format(project: Path) -> None:
+    with pytest.raises(ValueError, match="format must be one of"):
+        build_pack(project, format="json")  # type: ignore[arg-type]
+
+
+def test_pack_md_format_is_default(project: Path) -> None:
+    # The unparameterized call (existing behavior) and an explicit md call
+    # produce identical output.
+    assert build_pack(project) == build_pack(project, format="md")
+
+
+def test_pack_md_format_has_markdown_headers(project: Path) -> None:
+    text = build_pack(project, format="md")
+    # Markdown headers, not HTML/XML tags.
+    assert text.startswith("# Architect input bundle")
+    assert "<section" not in text
+    assert "<!doctype" not in text
+
+
+def test_pack_xml_format_wraps_sections_in_tags(project: Path) -> None:
+    text = build_pack(project, format="xml")
+    # Bundle wrapper + at least one section + header + footer.
+    assert text.startswith("<bundle ")
+    assert text.rstrip().endswith("</bundle>")
+    assert "<header " in text
+    assert "<section " in text
+    assert "<footer " in text
+    # Source content (markdown bodies stay markdown inside the tags) should
+    # still flow through.
+    assert "AcmeCorp" in text
+
+
+def test_pack_xml_format_includes_path_and_label_attrs(project: Path) -> None:
+    text = build_pack(project, format="xml")
+    # The DECISIONS file should appear as a section with path + label attrs.
+    assert 'path="planning/DECISIONS.md"' in text
+    assert 'label="Decisions' in text
+
+
+def test_pack_xml_format_escapes_xml_specials(tmp_path: Path) -> None:
+    # Build a minimal project whose content contains XML-special chars.
+    p = tmp_path / "xml-escape-demo"
+    scaffold(p)
+    (p / "planning" / "DECISIONS.md").write_text(
+        "# Decisions\n\n- chose <X> over Y & Z for the foo>bar case\n"
+    )
+    text = build_pack(p, format="xml")
+    # The body is inside an XML element — `<`, `>`, `&` must be escaped.
+    assert "&lt;X&gt;" in text
+    assert "Y &amp; Z" in text
+    # Raw unescaped angle brackets from the content should NOT appear inside
+    # the element body. (We allow them in our own emitted tags, naturally.)
+    assert "<X>" not in text
+
+
+def test_pack_html_format_emits_doctype_and_html_tags(project: Path) -> None:
+    text = build_pack(project, format="html")
+    assert text.startswith("<!doctype html>")
+    assert "<html lang=\"en\">" in text
+    assert "<head>" in text
+    assert "<body>" in text
+    assert text.rstrip().endswith("</html>")
+    # Markdown should have been converted — headers become <h1>/<h2>/etc.
+    # The label of the AGENTS section appears as an <h1> inside its section.
+    assert "<h1>" in text
+
+
+def test_pack_html_format_includes_section_kind_attr(project: Path) -> None:
+    text = build_pack(project, format="html")
+    # Header section gets a <header> tag with data-kind="header".
+    assert "<header data-kind=\"header\"" in text
+    # Regular file sections get <section data-kind="section">.
+    assert "<section data-kind=\"section\"" in text
+    assert "<footer data-kind=\"footer\"" in text
+
+
+def test_write_pack_picks_correct_extension(project: Path) -> None:
+    md_target = write_pack(project, format="md")
+    assert md_target.suffix == ".md"
+    assert md_target.name == ".socrates-architect-pack.md"
+
+    xml_target = write_pack(project, format="xml")
+    assert xml_target.suffix == ".xml"
+    assert xml_target.name == ".socrates-architect-pack.xml"
+
+    html_target = write_pack(project, format="html")
+    assert html_target.suffix == ".html"
+    assert html_target.name == ".socrates-architect-pack.html"
+
+
+def test_pack_all_formats_carry_user_content_through(project: Path) -> None:
+    # Independent of format, the operator's planning content must reach the
+    # output. AcmeCorp comes from the fixture's render_all answers.
+    for fmt in SUPPORTED_FORMATS:
+        text = build_pack(project, format=fmt)
+        assert "AcmeCorp" in text, f"format={fmt} dropped user content"
+        assert "choice" in text and "reason" in text, f"format={fmt} dropped a decision"
+
+
+def test_pack_html_format_error_when_markdown_missing(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Simulate the markdown package not being installed by making the
+    # internal import helper raise. This avoids actually uninstalling the
+    # dev-dep used by other tests.
+    import socrates120x.pack as pack_module
+
+    def _raise() -> None:
+        raise RuntimeError(
+            "--format html requires the `markdown` package. Install with "
+            "`pip install socrates120x[html]` or `pip install markdown`."
+        )
+
+    monkeypatch.setattr(pack_module, "_import_markdown", _raise)
+    with pytest.raises(RuntimeError, match="requires the `markdown` package"):
+        build_pack(project, format="html")

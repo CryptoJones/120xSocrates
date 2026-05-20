@@ -178,6 +178,30 @@ Auto-detection: if the project sits inside a CompanyOS layout (`builds/<project>
 
 Pattern files are named `CANDIDATE-<slug>.md`. Promote a candidate to a real pattern by dropping the `CANDIDATE-` prefix **only after** it has worked on at least one additional project.
 
+### `socrates pack [path]` — assemble an Architect input bundle
+
+Concatenates every load-bearing planning file (AGENTS, README, STATE, DOMAIN, DECISIONS, RISKS, QUESTIONS) plus the active sprint's four files into one paste-able bundle for the Architect (Claude Chat / ChatGPT / etc.). Output goes to `.socrates-architect-pack.<ext>` in the project root, or to stdout with `--stdout`.
+
+```bash
+socrates pack                          # write .socrates-architect-pack.md
+socrates pack --stdout                 # print to stdout
+socrates pack --sprint 002-rebate-engine   # override the auto-detected sprint
+socrates pack --include-philosophy     # prepend socrates' own 120x stance summary
+socrates pack --kit-path ~/120x-kit    # also embed the kit's three load-bearing files
+socrates pack --format xml             # XML section delimiters around markdown bodies
+socrates pack --format html            # full HTML (requires the [html] extra)
+```
+
+| Flag | Effect |
+|---|---|
+| `--sprint <name>` | include this sprint folder instead of auto-detecting the highest-numbered one |
+| `--stdout` | print to stdout instead of writing the file |
+| `--include-philosophy` | prepend a short, original 120x stance written by socrates |
+| `--kit-path PATH` | also embed the kit's three load-bearing files (or use `$SOCRATES_KIT_PATH`) |
+| `--format md\|html\|xml` | output format. `md` (default), `xml` (markdown wrapped in `<section>` tags — matches Anthropic's prompt-engineering recommendation), `html` (full HTML, requires `pip install socrates120x[html]`) |
+
+The output file extension follows the format: `.md`, `.xml`, or `.html`. The default `md` keeps the historical behavior. `xml` adds ~5% token overhead but gives the Architect explicit structural delimiters. `html` adds ~30-50% token overhead and requires the optional `markdown` dependency — use it when you're explicitly testing whether full HTML helps the Architect on your specific content.
+
 ### `socrates companyos <path>` — scaffold the macro layer
 
 Creates the CompanyOS skeleton: `clients/`, `builds/`, `pipeline/`, `patterns/`, `content/`, `reference/`, `daily/`, `templates/`, plus an `AGENTS.md` router that points each subfolder at its role.
