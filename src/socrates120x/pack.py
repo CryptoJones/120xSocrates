@@ -331,6 +331,25 @@ def _render_html(project: Path, sections: list[_Section]) -> str:
 
     Requires the ``markdown`` package. Install with
     ``pip install socrates120x[html]`` or ``pip install markdown``.
+
+    Security: planning files can contain arbitrary content the operator
+    pasted in (code samples, error logs, etc.). ``python-markdown`` passes
+    raw HTML through verbatim — there is no built-in safe mode in v3+. A
+    ``<script>`` snippet in any planning file would execute when the
+    rendered bundle is opened in a browser for preview.
+
+    The bundle is meant to be PASTED into an AI chat (which strips
+    scripts) or PREVIEWED in a browser. It never needs JavaScript itself.
+    So we ship a strict Content-Security-Policy meta tag:
+      - ``script-src 'none'`` blocks both ``<script>`` tags and inline
+        ``onclick=``/``onerror=`` handlers.
+      - ``object-src 'none'`` blocks ``<object>`` / ``<embed>``.
+      - ``frame-src 'none'`` blocks ``<iframe>`` (phishing redirect via
+        a planted iframe).
+      - ``base-uri 'none'`` blocks ``<base>`` tag rewriting that could
+        redirect relative links.
+      - ``style-src 'unsafe-inline'`` keeps inline styles (used by
+        ``fenced_code`` syntax highlighting) but disables external CSS.
     """
     md = _import_markdown()
     today = _dt.date.today().isoformat()
@@ -355,10 +374,21 @@ def _render_html(project: Path, sections: list[_Section]) -> str:
             f"<{tag}{attrs}>\n{label_html}  {body_html}\n</{tag}>"
         )
     body = "\n\n".join(rendered_sections)
+    csp = (
+        "default-src 'none'; "
+        "script-src 'none'; "
+        "object-src 'none'; "
+        "frame-src 'none'; "
+        "base-uri 'none'; "
+        "form-action 'none'; "
+        "style-src 'unsafe-inline'; "
+        "img-src data:"
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="{csp}">
 <title>Architect input bundle — {_xml_escape(project.name)}</title>
 <meta name="generated" content="{today}">
 <meta name="generator" content="socrates pack">
