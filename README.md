@@ -7,7 +7,7 @@ Interactive CLI that interrogates you Socratic-style and fills out the planning 
 [![Codeberg](https://img.shields.io/badge/Codeberg-CryptoJones%2F120xSocrates-2185D0?logo=codeberg&logoColor=white)](https://codeberg.org/CryptoJones/120xSocrates)
 [![GitHub](https://img.shields.io/badge/GitHub-CryptoJones%2F120xSocrates-181717?logo=github&logoColor=white)](https://github.com/CryptoJones/120xSocrates)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-v0.7.0-orange)]()
+[![Version](https://img.shields.io/badge/version-v0.8.0-orange)]()
 
 > Mirrored on both [GitHub](https://github.com/CryptoJones/120xSocrates) and
 > [Codeberg](https://codeberg.org/CryptoJones/120xSocrates). Issues filed on
