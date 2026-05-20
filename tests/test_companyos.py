@@ -49,3 +49,17 @@ def test_companyos_allows_empty_dir(tmp_path: Path) -> None:
     # Should succeed against an empty pre-existing dir.
     scaffold_companyos(target)
     assert (target / "AGENTS.md").is_file()
+
+
+def test_companyos_rejects_file_target(tmp_path) -> None:
+    """Symmetric guard with scaffold(): passing a regular file path must
+    fail up-front, not midway through the per-file write loop."""
+    import pytest
+
+    from socrates120x.companyos import scaffold_companyos
+
+    file_path = tmp_path / "co.txt"
+    file_path.write_text("operator's notes", encoding="utf-8")
+    with pytest.raises(NotADirectoryError, match="regular file"):
+        scaffold_companyos(file_path)
+    assert file_path.read_text(encoding="utf-8") == "operator's notes"
