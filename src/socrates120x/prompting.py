@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -86,7 +87,7 @@ def ask(
         return _ask_list(input_fn, output_fn, q)
     if q.type == "multiline":
         if editor:
-            return _ask_multiline_editor(output_fn, q)
+            return _ask_multiline_editor(output_fn, q, input_fn=input_fn)
         return _ask_multiline(input_fn, output_fn, q)
     return _ask_line(input_fn, output_fn, q)
 
@@ -133,11 +134,23 @@ def _ask_multiline(input_fn: InputFn, output_fn: OutputFn, q: Question) -> str:
     return text
 
 
-def _ask_multiline_editor(output_fn: OutputFn, q: Question) -> str:
+def _ask_multiline_editor(
+    output_fn: OutputFn, q: Question, *, input_fn: InputFn = input
+) -> str:
+    """Open $EDITOR for a multiline answer; fall back to inline prompt if
+    no editor is configured.
+
+    The fallback used to hardcode the builtin ``input`` instead of the
+    caller's ``input_fn``, which silently bypassed any input mock in
+    tests — and on real runs meant the operator typed into stdin without
+    seeing the prompt their parent shell expected. Now the parameter is
+    threaded through so the fallback respects whatever input mechanism
+    the caller wired up.
+    """
     editor = editor_command()
     if not editor:
         output_fn("   (no $EDITOR set and no fallback found — falling back to inline prompt)")
-        return _ask_multiline(input, output_fn, q)
+        return _ask_multiline(input_fn, output_fn, q)
 
     header = f"""# {q.prompt}
 # Lines starting with '#' are ignored. Save & quit to submit your answer.
@@ -174,7 +187,7 @@ def _ask_multiline_editor(output_fn: OutputFn, q: Question) -> str:
         return q.default
     if not body and q.required:
         output_fn("   (this one is required — re-opening editor)")
-        return _ask_multiline_editor(output_fn, q)
+        return _ask_multiline_editor(output_fn, q, input_fn=input_fn)
     return body
 
 
@@ -196,11 +209,24 @@ def _ask_list(input_fn: InputFn, output_fn: OutputFn, q: Question) -> list[str]:
 
 
 def editor_command() -> list[str] | None:
-    """Resolve the editor to invoke. Honour $VISUAL / $EDITOR, else fall back."""
+    """Resolve the editor to invoke. Honour $VISUAL / $EDITOR, else fall back.
+
+    Use shlex.split so quoted args in $EDITOR survive — e.g.
+        EDITOR="emacsclient -a 'emacs'"
+    becomes ``["emacsclient", "-a", "emacs"]``, not the previous broken
+    ``["emacsclient", "-a", "'emacs'"]`` from naive str.split.
+    """
     for env_var in ("VISUAL", "EDITOR"):
         cmd = os.environ.get(env_var)
         if cmd:
-            return cmd.split()
+            try:
+                parsed = shlex.split(cmd)
+            except ValueError:
+                # Unbalanced quotes — fall back to naive split rather than
+                # silently emit no editor at all.
+                parsed = cmd.split()
+            if parsed:
+                return parsed
     for candidate in ("nano", "vim", "vi"):
         if shutil.which(candidate):
             return [candidate]
