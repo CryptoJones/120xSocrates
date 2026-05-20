@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import datetime as _dt
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 from socrates120x.prompting import editor_command
+
+# Canonical entry filename: YYYY-MM-DD.md. `_list` and `_show_latest`
+# must not pick up unrelated .md files (notes.md, ideas.md, README.md)
+# that an operator may have dropped into the journal dir.
+_ENTRY_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _is_journal_entry(p: Path) -> bool:
+    """True if *p* is a canonical journal entry file (YYYY-MM-DD.md)."""
+    return p.suffix == ".md" and bool(_ENTRY_NAME.match(p.stem))
 
 
 def create_or_open_entry(project: Path, *, show: bool = False, list_all: bool = False) -> int:
@@ -73,10 +84,7 @@ def _template(date: str) -> str:
 
 
 def _list(journal_dir: Path) -> int:
-    entries = sorted(
-        p for p in journal_dir.glob("*.md")
-        if p.name != "README.md"
-    )
+    entries = sorted(p for p in journal_dir.glob("*.md") if _is_journal_entry(p))
     if not entries:
         print("(no journal entries yet — run `socrates journal` to create today's)")
         return 0
@@ -87,11 +95,11 @@ def _list(journal_dir: Path) -> int:
 
 def _show_latest(journal_dir: Path) -> int:
     entries = sorted(
-        (p for p in journal_dir.glob("*.md") if p.name != "README.md"),
+        (p for p in journal_dir.glob("*.md") if _is_journal_entry(p)),
         reverse=True,
     )
     if not entries:
         print("(no journal entries yet)")
         return 0
-    print(entries[0].read_text())
+    print(entries[0].read_text(encoding="utf-8"))
     return 0
