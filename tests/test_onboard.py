@@ -160,3 +160,71 @@ def test_top_bullets_skips_placeholder_lines() -> None:
     # Placeholder italics start with "- _" and we skip those.
     bullets = _top_bullets(text, "Risks", 3)
     assert bullets == ["real risk one"]
+
+
+# ---------------------------------------------------------------------------
+# Post-init decisions surface in WELCOME.md
+# (bugfix/onboard-includes-post-init-decisions)
+# ---------------------------------------------------------------------------
+
+
+def test_synthesize_includes_post_init_decisions_from_decide(tmp_path) -> None:
+    """`socrates decide` appends to DECISIONS.md after init. `socrates
+    onboard` must surface those — otherwise WELCOME.md stays stale and
+    new collaborators read decisions that were superseded weeks ago."""
+    from socrates120x.decide import record_decision
+    from socrates120x.onboard import synthesize_welcome
+    from socrates120x.render import render_all
+    from socrates120x.scaffold import scaffold
+
+    p = tmp_path / "demo"
+    scaffold(p)
+    render_all(p, {
+        "project_name": "demo", "client": "Acme", "tagline": "demo",
+        "business_goal": "g", "tech_stack": "Python",
+        "users": [], "current_process": "", "terminology": [],
+        "business_rules": [],
+        "decisions": ["Initial choice X — because Y"],
+        "out_of_scope": [],
+        "risks": [], "fragile_inputs": "", "open_questions": [],
+        "sprint1_goal": "", "sprint1_acceptance": [],
+        "sprint1_inspect": [], "state_current": "", "state_next": "", "state_blockers": [],
+    })
+    # Operator adds a fresh decision via the dated path.
+    record_decision(p, "Adopted DuckDB — outperformed Postgres on the q4 sample")
+
+    text = synthesize_welcome(p)
+    assert "Adopted DuckDB" in text, (
+        "WELCOME.md ignored a post-init decision added via `socrates decide`"
+    )
+    # Both the init decision AND the post-init one should be visible.
+    assert "Initial choice X" in text
+
+
+def test_synthesize_orders_post_init_decisions_first(tmp_path) -> None:
+    """Recency matters — the post-init decision should appear ABOVE the
+    init-time decision in WELCOME.md so new readers see the latest first."""
+    from socrates120x.decide import record_decision
+    from socrates120x.onboard import synthesize_welcome
+    from socrates120x.render import render_all
+    from socrates120x.scaffold import scaffold
+
+    p = tmp_path / "demo"
+    scaffold(p)
+    render_all(p, {
+        "project_name": "demo", "client": "Acme", "tagline": "demo",
+        "business_goal": "g", "tech_stack": "Python",
+        "users": [], "current_process": "", "terminology": [],
+        "business_rules": [],
+        "decisions": ["ORIGINAL choice — old reasoning"],
+        "out_of_scope": [],
+        "risks": [], "fragile_inputs": "", "open_questions": [],
+        "sprint1_goal": "", "sprint1_acceptance": [],
+        "sprint1_inspect": [], "state_current": "", "state_next": "", "state_blockers": [],
+    })
+    record_decision(p, "NEWER reversal — chose other thing after experiment")
+
+    text = synthesize_welcome(p)
+    assert text.index("NEWER reversal") < text.index("ORIGINAL choice"), (
+        "post-init decision should appear above the init-time decision"
+    )
