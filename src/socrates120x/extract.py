@@ -138,7 +138,7 @@ def run_extract(
 
     slug = _sanitize_slug(iv.answers.get("pattern_slug", "untitled"))
     target = target_dir / f"CANDIDATE-{slug}.md"
-    target.write_text(render_pattern(iv.answers, project=project))
+    target.write_text(render_pattern(iv.answers, project=project), encoding="utf-8")
     print(f"\nPattern candidate written to: {target}")
     print()
     print("Next steps:")

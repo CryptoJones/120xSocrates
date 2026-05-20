@@ -194,10 +194,10 @@ class Interview:
 
     def load(self) -> None:
         if self.answers_path.exists() and self.resume:
-            self.answers = json.loads(self.answers_path.read_text())
+            self.answers = json.loads(self.answers_path.read_text(encoding="utf-8"))
 
     def save(self) -> None:
-        self.answers_path.write_text(json.dumps(self.answers, indent=2) + "\n")
+        self.answers_path.write_text(json.dumps(self.answers, indent=2) + "\n", encoding="utf-8")
 
     def run(
         self,

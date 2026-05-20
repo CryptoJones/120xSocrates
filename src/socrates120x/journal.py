@@ -32,7 +32,7 @@ def create_or_open_entry(project: Path, *, show: bool = False, list_all: bool = 
     entry = journal_dir / f"{today}.md"
     is_new = not entry.exists()
     if is_new:
-        entry.write_text(_template(today))
+        entry.write_text(_template(today), encoding="utf-8")
         print(f"Created {entry}")
 
     cmd = editor_command()
@@ -93,5 +93,5 @@ def _show_latest(journal_dir: Path) -> int:
     if not entries:
         print("(no journal entries yet)")
         return 0
-    print(entries[0].read_text())
+    print(entries[0].read_text(encoding="utf-8"))
     return 0

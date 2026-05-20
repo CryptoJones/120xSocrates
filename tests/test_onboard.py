@@ -99,7 +99,7 @@ def test_write_welcome_creates_file(clean_project: Path) -> None:
     target = write_welcome(clean_project)
     assert target == clean_project / "WELCOME.md"
     assert target.is_file()
-    assert "WELCOME — demo" in target.read_text()
+    assert "WELCOME — demo" in target.read_text(encoding="utf-8")
 
 
 def test_top_bullets_extracts_first_n() -> None:
@@ -128,10 +128,11 @@ def test_welcome_prefers_answers_json_when_present(clean_project: Path) -> None:
     the WELCOME should reflect the JSON, not the markdown.
     """
     import json
+
     answers = _clean_answers()
     answers["client"] = "JsonOnlyCo"
     answers["decisions"] = ["JSON-only decision A — proof", "JSON-only decision B — proof"]
-    (clean_project / ".socrates-answers.json").write_text(json.dumps(answers))
+    (clean_project / ".socrates-answers.json").write_text(json.dumps(answers), encoding="utf-8")
 
     body = synthesize_welcome(clean_project)
     assert "JsonOnlyCo" in body

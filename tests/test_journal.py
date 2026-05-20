@@ -36,7 +36,7 @@ def test_journal_creates_today_entry(project: Path) -> None:
     entry = project / "planning" / "journal" / f"{today}.md"
     assert code == 0
     assert entry.is_file()
-    body = entry.read_text()
+    body = entry.read_text(encoding="utf-8")
     assert today in body
     assert "What happened" in body
 
@@ -48,7 +48,7 @@ def test_journal_list_empty_then_with_entry(project: Path, capsys: pytest.Captur
     assert "no journal entries yet" in out
 
     today = _dt.date.today().isoformat()
-    (project / "planning" / "journal" / f"{today}.md").write_text("entry")
+    (project / "planning" / "journal" / f"{today}.md").write_text("entry", encoding="utf-8")
     code = create_or_open_entry(project, list_all=True)
     out = capsys.readouterr().out
     assert today in out
@@ -56,7 +56,7 @@ def test_journal_list_empty_then_with_entry(project: Path, capsys: pytest.Captur
 
 def test_journal_show_prints_latest(project: Path, capsys: pytest.CaptureFixture) -> None:
     today = _dt.date.today().isoformat()
-    (project / "planning" / "journal" / f"{today}.md").write_text("hello journal")
+    (project / "planning" / "journal" / f"{today}.md").write_text("hello journal", encoding="utf-8")
     code = create_or_open_entry(project, show=True)
     assert code == 0
     out = capsys.readouterr().out

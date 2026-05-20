@@ -57,7 +57,7 @@ def scaffold_companyos(target: Path, *, overwrite: bool = False) -> list[Path]:
     for rel, body in files.items():
         path = target / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body)
+        path.write_text(body, encoding="utf-8")
         written.append(path)
     return written
 

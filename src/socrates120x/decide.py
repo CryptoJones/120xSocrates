@@ -39,9 +39,9 @@ def record_decision(project: Path, text: str) -> int:
     today = _dt.date.today().isoformat()
     bullet = f"- **{cleaned} ({today})**"
 
-    body = decisions_path.read_text()
+    body = decisions_path.read_text(encoding="utf-8")
     new_body = _insert_decision(body, bullet)
-    decisions_path.write_text(new_body)
+    decisions_path.write_text(new_body, encoding="utf-8")
     print(f"Appended to {decisions_path}:")
     print(f"  {bullet}")
     return 0

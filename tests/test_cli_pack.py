@@ -23,15 +23,31 @@ from socrates120x.scaffold import scaffold
 def project(tmp_path: Path) -> Path:
     p = tmp_path / "cli-demo"
     scaffold(p)
-    render_all(p, {
-        "project_name": "cli-demo", "client": "AcmeCorp", "tagline": "demo",
-        "business_goal": "goal", "tech_stack": "Python",
-        "users": ["op"], "current_process": "manual", "terminology": [],
-        "business_rules": [], "decisions": ["choice — reason"], "out_of_scope": [],
-        "risks": ["risk one"], "fragile_inputs": "", "open_questions": ["q1?"],
-        "sprint1_goal": "", "sprint1_acceptance": ["one"],
-        "sprint1_inspect": [], "state_current": "", "state_next": "", "state_blockers": [],
-    })
+    render_all(
+        p,
+        {
+            "project_name": "cli-demo",
+            "client": "AcmeCorp",
+            "tagline": "demo",
+            "business_goal": "goal",
+            "tech_stack": "Python",
+            "users": ["op"],
+            "current_process": "manual",
+            "terminology": [],
+            "business_rules": [],
+            "decisions": ["choice — reason"],
+            "out_of_scope": [],
+            "risks": ["risk one"],
+            "fragile_inputs": "",
+            "open_questions": ["q1?"],
+            "sprint1_goal": "",
+            "sprint1_acceptance": ["one"],
+            "sprint1_inspect": [],
+            "state_current": "",
+            "state_next": "",
+            "state_blockers": [],
+        },
+    )
     return p
 
 
@@ -52,7 +68,7 @@ def test_pack_format_xml_writes_xml(project: Path) -> None:
     assert rc == 0
     target = project / ".socrates-architect-pack.xml"
     assert target.is_file()
-    content = target.read_text()
+    content = target.read_text(encoding="utf-8")
     assert content.startswith("<bundle ")
     assert "AcmeCorp" in content
 
@@ -62,7 +78,7 @@ def test_pack_format_html_writes_html(project: Path) -> None:
     assert rc == 0
     target = project / ".socrates-architect-pack.html"
     assert target.is_file()
-    content = target.read_text()
+    content = target.read_text(encoding="utf-8")
     assert content.startswith("<!doctype html>")
 
 

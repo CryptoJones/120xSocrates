@@ -45,15 +45,31 @@ def company(tmp_path: Path) -> Path:
 def _make_build(company: Path, name: str) -> Path:
     project = company / "builds" / name
     scaffold(project)
-    render_all(project, {
-        "project_name": name, "client": "Acme", "tagline": "demo",
-        "business_goal": "g", "tech_stack": "Python",
-        "users": [], "current_process": "", "terminology": [],
-        "business_rules": [], "decisions": [], "out_of_scope": [],
-        "risks": [], "fragile_inputs": "", "open_questions": [],
-        "sprint1_goal": "", "sprint1_acceptance": [],
-        "sprint1_inspect": [], "state_current": "", "state_next": "", "state_blockers": [],
-    })
+    render_all(
+        project,
+        {
+            "project_name": name,
+            "client": "Acme",
+            "tagline": "demo",
+            "business_goal": "g",
+            "tech_stack": "Python",
+            "users": [],
+            "current_process": "",
+            "terminology": [],
+            "business_rules": [],
+            "decisions": [],
+            "out_of_scope": [],
+            "risks": [],
+            "fragile_inputs": "",
+            "open_questions": [],
+            "sprint1_goal": "",
+            "sprint1_acceptance": [],
+            "sprint1_inspect": [],
+            "state_current": "",
+            "state_next": "",
+            "state_blockers": [],
+        },
+    )
     return project
 
 
@@ -67,7 +83,7 @@ def test_patterns_review_flags_stale_candidate(company: Path) -> None:
     _make_build(company, "alpha")
     old = (_dt.date.today() - _dt.timedelta(days=120)).isoformat()
     (company / "patterns" / "CANDIDATE-validate-numbers.md").write_text(
-        _pattern(old, "alpha", "validate-numbers")
+        _pattern(old, "alpha", "validate-numbers"), encoding="utf-8"
     )
     report = review_patterns(company)
     kinds = {f.kind for f in report.findings}
@@ -76,7 +92,9 @@ def test_patterns_review_flags_stale_candidate(company: Path) -> None:
 
 def test_patterns_review_flags_orphan_source(company: Path) -> None:
     today = _dt.date.today().isoformat()
-    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "ghost-project", "x"))
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        _pattern(today, "ghost-project", "x"), encoding="utf-8"
+    )
     report = review_patterns(company)
     kinds = {f.kind for f in report.findings}
     assert FindingKind.ORPHAN in kinds
@@ -88,11 +106,12 @@ def test_patterns_review_quiet_when_pattern_reused_elsewhere(company: Path) -> N
     other = _make_build(company, "beta")
     # Mention the pattern slug in beta's STATE.
     (other / "planning" / "STATE.md").write_text(
-        (other / "planning" / "STATE.md").read_text() + "\nReused: validate-numbers\n"
+        (other / "planning" / "STATE.md").read_text(encoding="utf-8")
+        + "\nReused: validate-numbers\n"
     )
     today = _dt.date.today().isoformat()
     (company / "patterns" / "CANDIDATE-validate-numbers.md").write_text(
-        _pattern(today, "alpha", "validate-numbers")
+        _pattern(today, "alpha", "validate-numbers"), encoding="utf-8"
     )
     report = review_patterns(company)
     # No UNUSED finding for this pattern (it appears in beta).
@@ -106,11 +125,12 @@ def test_patterns_review_flags_unused(company: Path) -> None:
     _make_build(company, "beta")  # exists but doesn't reference the slug
     # Mention slug in alpha (source) — but nowhere else.
     (alpha / "planning" / "STATE.md").write_text(
-        (alpha / "planning" / "STATE.md").read_text() + "\nMentions validate-numbers.\n"
+        (alpha / "planning" / "STATE.md").read_text(encoding="utf-8")
+        + "\nMentions validate-numbers.\n"
     )
     today = _dt.date.today().isoformat()
     (company / "patterns" / "CANDIDATE-validate-numbers.md").write_text(
-        _pattern(today, "alpha", "validate-numbers")
+        _pattern(today, "alpha", "validate-numbers"), encoding="utf-8"
     )
     report = review_patterns(company)
     unused = [f for f in report.findings if f.kind == FindingKind.UNUSED]
@@ -125,7 +145,9 @@ def test_format_pattern_report_clean(company: Path) -> None:
 
 def test_format_pattern_report_groups_by_kind(company: Path) -> None:
     today = _dt.date.today().isoformat()
-    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "ghost", "x"))
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        _pattern(today, "ghost", "x"), encoding="utf-8"
+    )
     report = review_patterns(company)
     text = format_pattern_report(report, use_color=False)
     assert "orphan-source" in text
@@ -139,12 +161,15 @@ def test_format_pattern_report_groups_by_kind(company: Path) -> None:
 def test_review_writes_usage_cache(company: Path) -> None:
     _make_build(company, "alpha")
     today = _dt.date.today().isoformat()
-    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        _pattern(today, "alpha", "x"), encoding="utf-8"
+    )
     review_patterns(company)
     cache_path = company / "patterns" / ".usage-cache.json"
     assert cache_path.is_file()
     import json
-    data = json.loads(cache_path.read_text())
+
+    data = json.loads(cache_path.read_text(encoding="utf-8"))
     assert data["version"] == 2
     assert "x" in data["slug_set"]
     assert "alpha" in data["projects"]
@@ -156,19 +181,22 @@ def test_cache_per_project_segment_is_reused(company: Path) -> None:
     project's cached matched_slugs is trusted verbatim — including
     fabricated entries we inject for the test."""
     import json
+
     _make_build(company, "alpha")
     today = _dt.date.today().isoformat()
-    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        _pattern(today, "alpha", "x"), encoding="utf-8"
+    )
     review_patterns(company)
     cache_path = company / "patterns" / ".usage-cache.json"
-    data = json.loads(cache_path.read_text())
+    data = json.loads(cache_path.read_text(encoding="utf-8"))
 
     # Inject a fake matched slug into alpha's segment WITHOUT changing alpha's mtime.
     data["projects"]["alpha"]["matched_slugs"] = ["x", "phantom-slug"]
-    cache_path.write_text(json.dumps(data))
+    cache_path.write_text(json.dumps(data), encoding="utf-8")
 
     review_patterns(company)
-    refreshed = json.loads(cache_path.read_text())
+    refreshed = json.loads(cache_path.read_text(encoding="utf-8"))
     # The injected entry must survive — alpha's segment was reused.
     assert "phantom-slug" in refreshed["projects"]["alpha"]["matched_slugs"]
 
@@ -179,18 +207,21 @@ def test_cache_invalidated_per_project_on_mtime_bump(company: Path) -> None:
     import json
     import os
     import time
+
     alpha = _make_build(company, "alpha")
     _make_build(company, "beta")
     today = _dt.date.today().isoformat()
-    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        _pattern(today, "alpha", "x"), encoding="utf-8"
+    )
     review_patterns(company)
     cache_path = company / "patterns" / ".usage-cache.json"
 
     # Inject phantom slugs into BOTH project segments.
-    data = json.loads(cache_path.read_text())
+    data = json.loads(cache_path.read_text(encoding="utf-8"))
     data["projects"]["alpha"]["matched_slugs"] = ["x", "phantom-from-alpha"]
     data["projects"]["beta"]["matched_slugs"] = ["phantom-from-beta"]
-    cache_path.write_text(json.dumps(data))
+    cache_path.write_text(json.dumps(data), encoding="utf-8")
 
     # Bump alpha's mtime, leave beta alone.
     state = alpha / "planning" / "STATE.md"
@@ -199,7 +230,7 @@ def test_cache_invalidated_per_project_on_mtime_bump(company: Path) -> None:
     os.utime(state, (new_mtime, new_mtime))
 
     review_patterns(company)
-    refreshed = json.loads(cache_path.read_text())
+    refreshed = json.loads(cache_path.read_text(encoding="utf-8"))
     # alpha was rescanned; phantom entry is gone.
     assert "phantom-from-alpha" not in refreshed["projects"]["alpha"]["matched_slugs"]
     # beta was NOT rescanned; phantom entry survives.
@@ -209,22 +240,27 @@ def test_cache_invalidated_per_project_on_mtime_bump(company: Path) -> None:
 def test_cache_invalidated_when_slug_set_changes(company: Path) -> None:
     """Adding a new pattern invalidates every project's segment."""
     import json
+
     _make_build(company, "alpha")
     today = _dt.date.today().isoformat()
-    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        _pattern(today, "alpha", "x"), encoding="utf-8"
+    )
     review_patterns(company)
     cache_path = company / "patterns" / ".usage-cache.json"
 
     # Inject a phantom slug; will be wiped when the slug_set changes.
-    data = json.loads(cache_path.read_text())
+    data = json.loads(cache_path.read_text(encoding="utf-8"))
     data["projects"]["alpha"]["matched_slugs"] = ["x", "phantom"]
-    cache_path.write_text(json.dumps(data))
+    cache_path.write_text(json.dumps(data), encoding="utf-8")
 
     # Add a second pattern. slug_set changes.
-    (company / "patterns" / "CANDIDATE-y.md").write_text(_pattern(today, "alpha", "y"))
+    (company / "patterns" / "CANDIDATE-y.md").write_text(
+        _pattern(today, "alpha", "y"), encoding="utf-8"
+    )
     review_patterns(company)
 
-    refreshed = json.loads(cache_path.read_text())
+    refreshed = json.loads(cache_path.read_text(encoding="utf-8"))
     assert "phantom" not in refreshed["projects"]["alpha"]["matched_slugs"]
     assert set(refreshed["slug_set"]) == {"x", "y"}
 
@@ -232,19 +268,29 @@ def test_cache_invalidated_when_slug_set_changes(company: Path) -> None:
 def test_use_cache_false_forces_rescan(company: Path) -> None:
     """use_cache=False ignores the existing cache and recomputes."""
     import json
+
     _make_build(company, "alpha")
     today = _dt.date.today().isoformat()
-    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        _pattern(today, "alpha", "x"), encoding="utf-8"
+    )
     cache_path = company / "patterns" / ".usage-cache.json"
     # Seed a stale cache that claims alpha mentions a phantom slug.
-    cache_path.write_text(json.dumps({
-        "version": 2,
-        "computed_at": "1970-01-01T00:00:00+00:00",
-        "slug_set": ["x"],
-        "projects": {"alpha": {"mtime": 9_999_999_999.0, "matched_slugs": ["x", "phantom"]}},
-    }))
+    cache_path.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "computed_at": "1970-01-01T00:00:00+00:00",
+                "slug_set": ["x"],
+                "projects": {
+                    "alpha": {"mtime": 9_999_999_999.0, "matched_slugs": ["x", "phantom"]}
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     review_patterns(company, use_cache=False)
-    refreshed = json.loads(cache_path.read_text())
+    refreshed = json.loads(cache_path.read_text(encoding="utf-8"))
     # Cache was overwritten; phantom is gone.
     assert "phantom" not in refreshed["projects"]["alpha"]["matched_slugs"]
 
@@ -252,17 +298,25 @@ def test_use_cache_false_forces_rescan(company: Path) -> None:
 def test_cache_rejects_old_version(company: Path) -> None:
     """A v1 cache (from earlier socrates) is treated as missing."""
     import json
+
     _make_build(company, "alpha")
     today = _dt.date.today().isoformat()
-    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "alpha", "x"))
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        _pattern(today, "alpha", "x"), encoding="utf-8"
+    )
     cache_path = company / "patterns" / ".usage-cache.json"
-    cache_path.write_text(json.dumps({
-        "version": 1,
-        "computed_at": "1970-01-01T00:00:00+00:00",
-        "max_input_mtime": 9_999_999_999.0,
-        "usage": {"x": ["alpha", "phantom-from-v1"]},
-    }))
+    cache_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "computed_at": "1970-01-01T00:00:00+00:00",
+                "max_input_mtime": 9_999_999_999.0,
+                "usage": {"x": ["alpha", "phantom-from-v1"]},
+            }
+        ),
+        encoding="utf-8",
+    )
     review_patterns(company)
-    refreshed = json.loads(cache_path.read_text())
+    refreshed = json.loads(cache_path.read_text(encoding="utf-8"))
     assert refreshed["version"] == 2
     assert "phantom-from-v1" not in str(refreshed)

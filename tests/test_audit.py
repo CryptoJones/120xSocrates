@@ -85,8 +85,14 @@ def test_freshly_populated_project_has_no_errors(clean_project: Path) -> None:
 def test_audit_runs_every_check(clean_project: Path) -> None:
     report = run_audit(clean_project)
     expected = {
-        "required-files", "scaffold-shape", "sprint-folders", "adapter-routing",
-        "acceptance-weasels", "state-freshness", "always-on-risks", "terminology-used",
+        "required-files",
+        "scaffold-shape",
+        "sprint-folders",
+        "adapter-routing",
+        "acceptance-weasels",
+        "state-freshness",
+        "always-on-risks",
+        "terminology-used",
     }
     assert set(report.checks_run) == expected
 
@@ -114,10 +120,11 @@ def test_scaffold_shape_check_emits_info_on_pruning(clean_project: Path) -> None
 def test_scaffold_shape_check_honours_skip_list(clean_project: Path) -> None:
     """`.socrates-audit.json` lets the operator silence specific paths."""
     import json
+
     (clean_project / "docs" / "API.md").unlink()
     (clean_project / "docs" / "PERMISSIONS.md").unlink()
     (clean_project / ".socrates-audit.json").write_text(
-        json.dumps({"scaffold_shape": {"ignore": ["docs/API.md"]}})
+        json.dumps({"scaffold_shape": {"ignore": ["docs/API.md"]}}), encoding="utf-8"
     )
     findings = ScaffoldShapeCheck().run(clean_project)
     messages = [f.message for f in findings]
@@ -146,7 +153,9 @@ def test_sprint_folder_check_flags_missing_files(clean_project: Path) -> None:
 
 
 def test_adapter_check_fires_when_pointer_missing(clean_project: Path) -> None:
-    (clean_project / "CLAUDE.md").write_text("# This file does not mention the router.")
+    (clean_project / "CLAUDE.md").write_text(
+        "# This file does not mention the router.", encoding="utf-8"
+    )
     findings = AdapterPointsToAgentsCheck().run(clean_project)
     assert any("CLAUDE.md" in f.message for f in findings)
 
@@ -157,7 +166,8 @@ def test_weasel_words_check_fires(clean_project: Path) -> None:
         "# acceptance\n\n"
         "- The system is robust enough for production.\n"
         "- Tests pass as needed.\n"
-        "- DOMAIN.md reflects client terminology.\n"  # this line is clean
+        "- DOMAIN.md reflects client terminology.\n",  # this line is clean
+        encoding="utf-8",
     )
     findings = WeaselWordsCheck().run(clean_project)
     assert len(findings) == 2
@@ -167,7 +177,7 @@ def test_weasel_words_check_fires(clean_project: Path) -> None:
 def test_state_freshness_check_fires_on_old_date(clean_project: Path) -> None:
     state = clean_project / "planning" / "STATE.md"
     old = (_dt.date.today() - _dt.timedelta(days=120)).isoformat()
-    state.write_text(f"# STATE\n\n_Last updated: {old}_\n")
+    state.write_text(f"# STATE\n\n_Last updated: {old}_\n", encoding="utf-8")
     findings = StateFreshnessCheck().run(clean_project)
     assert len(findings) == 1
     assert "120 days ago" in findings[0].message
@@ -181,7 +191,7 @@ def test_state_freshness_check_quiet_when_fresh(clean_project: Path) -> None:
 
 def test_always_on_risks_check_fires_when_missing(clean_project: Path) -> None:
     risks = clean_project / "planning" / "RISKS.md"
-    risks.write_text("# RISKS\n\n- Some project-specific risk only.\n")
+    risks.write_text("# RISKS\n\n- Some project-specific risk only.\n", encoding="utf-8")
     findings = AlwaysOnRisksCheck().run(clean_project)
     assert len(findings) == 1
     assert "source of truth" in findings[0].message.lower()
@@ -195,11 +205,12 @@ def test_terminology_used_check_flags_orphan_term(clean_project: Path) -> None:
         "# DOMAIN\n\n"
         "## Terminology\n\n"
         "- orphaned-concept — a thing nothing else mentions\n"
-        "- live-term — referenced elsewhere\n"
+        "- live-term — referenced elsewhere\n",
+        encoding="utf-8",
     )
     risks = clean_project / "planning" / "RISKS.md"
     risks.write_text(
-        risks.read_text() + "\n\nNote: a live-term issue could surface here."
+        risks.read_text(encoding="utf-8") + "\n\nNote: a live-term issue could surface here."
     )
     findings = TerminologyUsedCheck().run(clean_project)
     flagged = {f.message for f in findings}

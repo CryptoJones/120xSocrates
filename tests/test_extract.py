@@ -59,10 +59,17 @@ def test_render_pattern_includes_all_sections() -> None:
     assert "demo" in body  # project name
 
 
-@pytest.mark.parametrize("missing_key", [
-    "pattern_summary", "pattern_kind", "pattern_when_applies",
-    "pattern_when_does_not", "pattern_body", "pattern_war_story",
-])
+@pytest.mark.parametrize(
+    "missing_key",
+    [
+        "pattern_summary",
+        "pattern_kind",
+        "pattern_when_applies",
+        "pattern_when_does_not",
+        "pattern_body",
+        "pattern_war_story",
+    ],
+)
 def test_render_pattern_handles_missing_field(missing_key: str) -> None:
     answers = {
         "pattern_slug": "x",

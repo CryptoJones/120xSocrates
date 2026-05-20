@@ -29,7 +29,7 @@ def test_companyos_scaffold_creates_full_macro_tree(tmp_path: Path) -> None:
 def test_companyos_agents_md_routes_to_builds(tmp_path: Path) -> None:
     target = tmp_path / "120x"
     scaffold_companyos(target)
-    agents = (target / "AGENTS.md").read_text()
+    agents = (target / "AGENTS.md").read_text(encoding="utf-8")
     assert "builds/" in agents
     assert "patterns/" in agents
     assert "clients/" in agents
@@ -38,7 +38,7 @@ def test_companyos_agents_md_routes_to_builds(tmp_path: Path) -> None:
 def test_companyos_refuses_to_overwrite_non_empty(tmp_path: Path) -> None:
     target = tmp_path / "existing"
     target.mkdir()
-    (target / "junk.txt").write_text("something")
+    (target / "junk.txt").write_text("something", encoding="utf-8")
     with pytest.raises(FileExistsError):
         scaffold_companyos(target)
 

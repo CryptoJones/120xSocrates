@@ -19,15 +19,31 @@ from socrates120x.scaffold import scaffold
 def project(tmp_path: Path) -> Path:
     p = tmp_path / "demo"
     scaffold(p)
-    render_all(p, {
-        "project_name": "demo", "client": "AcmeCorp", "tagline": "demo tagline",
-        "business_goal": "the goal", "tech_stack": "Python + DuckDB",
-        "users": ["op"], "current_process": "manual", "terminology": [],
-        "business_rules": [], "decisions": ["choice — reason"], "out_of_scope": [],
-        "risks": ["risk one"], "fragile_inputs": "", "open_questions": ["q1?"],
-        "sprint1_goal": "", "sprint1_acceptance": ["criterion one"],
-        "sprint1_inspect": [], "state_current": "", "state_next": "", "state_blockers": [],
-    })
+    render_all(
+        p,
+        {
+            "project_name": "demo",
+            "client": "AcmeCorp",
+            "tagline": "demo tagline",
+            "business_goal": "the goal",
+            "tech_stack": "Python + DuckDB",
+            "users": ["op"],
+            "current_process": "manual",
+            "terminology": [],
+            "business_rules": [],
+            "decisions": ["choice — reason"],
+            "out_of_scope": [],
+            "risks": ["risk one"],
+            "fragile_inputs": "",
+            "open_questions": ["q1?"],
+            "sprint1_goal": "",
+            "sprint1_acceptance": ["criterion one"],
+            "sprint1_inspect": [],
+            "state_current": "",
+            "state_next": "",
+            "state_blockers": [],
+        },
+    )
     return p
 
 
@@ -63,7 +79,7 @@ def test_pack_specific_sprint(project: Path) -> None:
     sprint2 = project / "planning" / "sprints" / "002-rebate-engine"
     sprint2.mkdir()
     for fname in ("requirements.md", "blueprint.md", "acceptance.md", "handoff-prompt.md"):
-        (sprint2 / fname).write_text(f"# {fname} (sprint 2)")
+        (sprint2 / fname).write_text(f"# {fname} (sprint 2)", encoding="utf-8")
     text = build_pack(project, include_sprint="002-rebate-engine")
     assert "002-rebate-engine" in text
     # Sprint 1 files should NOT appear since we asked for sprint 2.
@@ -80,7 +96,7 @@ def test_write_pack_creates_file(project: Path) -> None:
     target = write_pack(project)
     assert target == project / ".socrates-architect-pack.md"
     assert target.is_file()
-    assert "AcmeCorp" in target.read_text()
+    assert "AcmeCorp" in target.read_text(encoding="utf-8")
 
 
 def test_pack_starts_with_architect_header(project: Path) -> None:
@@ -105,10 +121,10 @@ def test_pack_kit_path_embeds_kit_files(project: Path, tmp_path: Path) -> None:
     kit = tmp_path / "fake-kit"
     kit.mkdir()
     (kit / "120x-architect-builder-philosophy.md").write_text(
-        "# Fake philosophy doc body content."
+        "# Fake philosophy doc body content.", encoding="utf-8"
     )
     (kit / "120x-project-scaffold-instructions.md").write_text(
-        "# Fake scaffold instructions content."
+        "# Fake scaffold instructions content.", encoding="utf-8"
     )
     # Quickstart deliberately absent — pack should skip cleanly.
     text = build_pack(project, kit_path=kit)
@@ -121,7 +137,7 @@ def test_pack_kit_path_embeds_kit_files(project: Path, tmp_path: Path) -> None:
 def test_pack_kit_path_via_env_var(project: Path, tmp_path: Path, monkeypatch) -> None:
     kit = tmp_path / "env-kit"
     kit.mkdir()
-    (kit / "120x-quickstart.md").write_text("# Quickstart from env\n")
+    (kit / "120x-quickstart.md").write_text("# Quickstart from env\n", encoding="utf-8")
     monkeypatch.setenv("SOCRATES_KIT_PATH", str(kit))
     text = build_pack(project)
     assert "Quickstart from env" in text
@@ -137,7 +153,9 @@ def test_pack_kit_path_missing_dir_skipped(project: Path) -> None:
 def test_pack_philosophy_and_kit_can_combine(project: Path, tmp_path: Path) -> None:
     kit = tmp_path / "kit"
     kit.mkdir()
-    (kit / "120x-architect-builder-philosophy.md").write_text("# Kit philosophy.\n")
+    (kit / "120x-architect-builder-philosophy.md").write_text(
+        "# Kit philosophy.\n", encoding="utf-8"
+    )
     text = build_pack(project, include_philosophy=True, kit_path=kit)
     assert "120x Architect / Builder stance" in text  # socrates preamble
     assert "Kit philosophy" in text  # kit file
@@ -197,7 +215,7 @@ def test_pack_xml_format_escapes_xml_specials(tmp_path: Path) -> None:
     p = tmp_path / "xml-escape-demo"
     scaffold(p)
     (p / "planning" / "DECISIONS.md").write_text(
-        "# Decisions\n\n- chose <X> over Y & Z for the foo>bar case\n"
+        "# Decisions\n\n- chose <X> over Y & Z for the foo>bar case\n", encoding="utf-8"
     )
     text = build_pack(p, format="xml")
     # The body is inside an XML element — `<`, `>`, `&` must be escaped.
@@ -211,7 +229,7 @@ def test_pack_xml_format_escapes_xml_specials(tmp_path: Path) -> None:
 def test_pack_html_format_emits_doctype_and_html_tags(project: Path) -> None:
     text = build_pack(project, format="html")
     assert text.startswith("<!doctype html>")
-    assert "<html lang=\"en\">" in text
+    assert '<html lang="en">' in text
     assert "<head>" in text
     assert "<body>" in text
     assert text.rstrip().endswith("</html>")
@@ -223,10 +241,10 @@ def test_pack_html_format_emits_doctype_and_html_tags(project: Path) -> None:
 def test_pack_html_format_includes_section_kind_attr(project: Path) -> None:
     text = build_pack(project, format="html")
     # Header section gets a <header> tag with data-kind="header".
-    assert "<header data-kind=\"header\"" in text
+    assert '<header data-kind="header"' in text
     # Regular file sections get <section data-kind="section">.
-    assert "<section data-kind=\"section\"" in text
-    assert "<footer data-kind=\"footer\"" in text
+    assert '<section data-kind="section"' in text
+    assert '<footer data-kind="footer"' in text
 
 
 def test_write_pack_picks_correct_extension(project: Path) -> None:

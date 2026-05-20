@@ -35,7 +35,7 @@ def _load_answers_json(project: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             return data
     except (OSError, ValueError):
@@ -79,12 +79,12 @@ def _synthesize_from_markdown(project: Path) -> str:
     today = _dt.date.today().isoformat()
     name = project.name
 
-    readme = (project / "README.md").read_text(errors="replace") if (project / "README.md").is_file() else ""
-    agents = (project / "AGENTS.md").read_text(errors="replace") if (project / "AGENTS.md").is_file() else ""
-    state = (project / "planning" / "STATE.md").read_text(errors="replace") if (project / "planning" / "STATE.md").is_file() else ""
-    decisions = (project / "planning" / "DECISIONS.md").read_text(errors="replace") if (project / "planning" / "DECISIONS.md").is_file() else ""
-    risks = (project / "planning" / "RISKS.md").read_text(errors="replace") if (project / "planning" / "RISKS.md").is_file() else ""
-    questions = (project / "planning" / "QUESTIONS.md").read_text(errors="replace") if (project / "planning" / "QUESTIONS.md").is_file() else ""
+    readme = (project / "README.md").read_text(errors="replace", encoding="utf-8") if (project / "README.md").is_file() else ""
+    agents = (project / "AGENTS.md").read_text(errors="replace", encoding="utf-8") if (project / "AGENTS.md").is_file() else ""
+    state = (project / "planning" / "STATE.md").read_text(errors="replace", encoding="utf-8") if (project / "planning" / "STATE.md").is_file() else ""
+    decisions = (project / "planning" / "DECISIONS.md").read_text(errors="replace", encoding="utf-8") if (project / "planning" / "DECISIONS.md").is_file() else ""
+    risks = (project / "planning" / "RISKS.md").read_text(errors="replace", encoding="utf-8") if (project / "planning" / "RISKS.md").is_file() else ""
+    questions = (project / "planning" / "QUESTIONS.md").read_text(errors="replace", encoding="utf-8") if (project / "planning" / "QUESTIONS.md").is_file() else ""
 
     tagline = _extract_tagline(readme, agents)
     client = _extract_field(agents, "Client") or _extract_field(readme, "Client")
@@ -177,7 +177,7 @@ def write_welcome(project: Path) -> Path:
     """Write WELCOME.md into the project root and return its path."""
     body = synthesize_welcome(project)
     target = project / "WELCOME.md"
-    target.write_text(body)
+    target.write_text(body, encoding="utf-8")
     return target
 
 

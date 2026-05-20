@@ -119,7 +119,7 @@ def write_pack(
         format=format,
     )
     target = project / f".socrates-architect-pack.{FORMAT_EXTENSIONS[format]}"
-    target.write_text(body)
+    target.write_text(body, encoding="utf-8")
     return target
 
 
@@ -233,7 +233,7 @@ def _kit_sections(kit: Path) -> list[_Section]:
         path = kit / name
         if not path.is_file():
             continue
-        text = path.read_text(errors="replace").strip()
+        text = path.read_text(errors="replace", encoding="utf-8").strip()
         if not text:
             continue
         out.append(_Section(
@@ -253,7 +253,7 @@ def _file_section(path: Path, *, rel_display: str, label: str) -> _Section:
             path=rel_display,
             kind="missing",
         )
-    text = path.read_text(errors="replace").strip()
+    text = path.read_text(errors="replace", encoding="utf-8").strip()
     if not text:
         return _Section(
             label=f"{label}  (`{rel_display}`)",

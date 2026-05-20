@@ -29,15 +29,31 @@ def company(tmp_path: Path) -> Path:
 def _make_build(company: Path, name: str, client: str = "Acme") -> Path:
     project = company / "builds" / name
     scaffold(project)
-    render_all(project, {
-        "project_name": name, "client": client, "tagline": "demo",
-        "business_goal": "g", "tech_stack": "Python",
-        "users": [], "current_process": "", "terminology": [],
-        "business_rules": [], "decisions": [], "out_of_scope": [],
-        "risks": [], "fragile_inputs": "", "open_questions": [],
-        "sprint1_goal": "", "sprint1_acceptance": [],
-        "sprint1_inspect": [], "state_current": "", "state_next": "", "state_blockers": [],
-    })
+    render_all(
+        project,
+        {
+            "project_name": name,
+            "client": client,
+            "tagline": "demo",
+            "business_goal": "g",
+            "tech_stack": "Python",
+            "users": [],
+            "current_process": "",
+            "terminology": [],
+            "business_rules": [],
+            "decisions": [],
+            "out_of_scope": [],
+            "risks": [],
+            "fragile_inputs": "",
+            "open_questions": [],
+            "sprint1_goal": "",
+            "sprint1_acceptance": [],
+            "sprint1_inspect": [],
+            "state_current": "",
+            "state_next": "",
+            "state_blockers": [],
+        },
+    )
     return project
 
 
@@ -85,7 +101,7 @@ def test_orphan_builds_check_quiet_when_client_folder_exists(company: Path) -> N
 
 def test_orphan_pattern_source_check_fires(company: Path) -> None:
     (company / "patterns" / "CANDIDATE-x.md").write_text(
-        "**Source project** | `ghost-project`\n"
+        "**Source project** | `ghost-project`\n", encoding="utf-8"
     )
     findings = OrphanPatternSourceCheck().run(company)
     assert any("ghost-project" in f.message for f in findings)
@@ -94,7 +110,7 @@ def test_orphan_pattern_source_check_fires(company: Path) -> None:
 def test_orphan_pattern_source_check_quiet_when_source_exists(company: Path) -> None:
     _make_build(company, "alpha")
     (company / "patterns" / "CANDIDATE-x.md").write_text(
-        "**Source project** | `alpha`\n"
+        "**Source project** | `alpha`\n", encoding="utf-8"
     )
     findings = OrphanPatternSourceCheck().run(company)
     assert findings == []
@@ -102,8 +118,7 @@ def test_orphan_pattern_source_check_quiet_when_source_exists(company: Path) -> 
 
 def test_stale_proposal_check_flags_mention(company: Path) -> None:
     (company / "pipeline" / "proposals.md").write_text(
-        "### Project — Client — 2026-01-01\n"
-        "Slug: `quarterly-rebates`\n"
+        "### Project — Client — 2026-01-01\nSlug: `quarterly-rebates`\n", encoding="utf-8"
     )
     findings = StaleProposalCheck().run(company)
     assert any("quarterly-rebates" in f.message for f in findings)
@@ -112,7 +127,7 @@ def test_stale_proposal_check_flags_mention(company: Path) -> None:
 def test_stale_proposal_check_quiet_when_build_exists(company: Path) -> None:
     _make_build(company, "quarterly-rebates")
     (company / "pipeline" / "proposals.md").write_text(
-        "Slug: `quarterly-rebates`\n"
+        "Slug: `quarterly-rebates`\n", encoding="utf-8"
     )
     findings = StaleProposalCheck().run(company)
     assert findings == []

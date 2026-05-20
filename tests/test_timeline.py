@@ -16,15 +16,31 @@ from socrates120x.timeline import EventKind, build_timeline, format_timeline
 def project(tmp_path: Path) -> Path:
     p = tmp_path / "demo"
     scaffold(p)
-    render_all(p, {
-        "project_name": "demo", "client": "Acme", "tagline": "t",
-        "business_goal": "g", "tech_stack": "Python",
-        "users": [], "current_process": "", "terminology": [],
-        "business_rules": [], "decisions": [], "out_of_scope": [],
-        "risks": [], "fragile_inputs": "", "open_questions": [],
-        "sprint1_goal": "", "sprint1_acceptance": [],
-        "sprint1_inspect": [], "state_current": "", "state_next": "", "state_blockers": [],
-    })
+    render_all(
+        p,
+        {
+            "project_name": "demo",
+            "client": "Acme",
+            "tagline": "t",
+            "business_goal": "g",
+            "tech_stack": "Python",
+            "users": [],
+            "current_process": "",
+            "terminology": [],
+            "business_rules": [],
+            "decisions": [],
+            "out_of_scope": [],
+            "risks": [],
+            "fragile_inputs": "",
+            "open_questions": [],
+            "sprint1_goal": "",
+            "sprint1_acceptance": [],
+            "sprint1_inspect": [],
+            "state_current": "",
+            "state_next": "",
+            "state_blockers": [],
+        },
+    )
     return p
 
 
@@ -32,7 +48,7 @@ def test_timeline_includes_journal_entries(project: Path) -> None:
     journal = project / "planning" / "journal"
     yesterday = _dt.date.today() - _dt.timedelta(days=1)
     (journal / f"{yesterday.isoformat()}.md").write_text(
-        "# Journal\n\nFixed the parser bug.\n"
+        "# Journal\n\nFixed the parser bug.\n", encoding="utf-8"
     )
     events = build_timeline(project)
     journal_events = [e for e in events if e.kind is EventKind.JOURNAL]
@@ -53,7 +69,8 @@ def test_timeline_extracts_dated_decisions(project: Path) -> None:
     decisions.write_text(
         "## Decisions captured\n\n"
         "- **Supabase over Postgres — client preference (2026-04-01)**\n"
-        "- An undated decision should NOT appear in the timeline.\n"
+        "- An undated decision should NOT appear in the timeline.\n",
+        encoding="utf-8",
     )
     events = build_timeline(project)
     decision_events = [e for e in events if e.kind is EventKind.DECISION]
@@ -66,8 +83,8 @@ def test_timeline_sorts_chronologically(project: Path) -> None:
     journal = project / "planning" / "journal"
     days_ago_3 = _dt.date.today() - _dt.timedelta(days=3)
     days_ago_1 = _dt.date.today() - _dt.timedelta(days=1)
-    (journal / f"{days_ago_3.isoformat()}.md").write_text("older")
-    (journal / f"{days_ago_1.isoformat()}.md").write_text("newer")
+    (journal / f"{days_ago_3.isoformat()}.md").write_text("older", encoding="utf-8")
+    (journal / f"{days_ago_1.isoformat()}.md").write_text("newer", encoding="utf-8")
     events = build_timeline(project)
     dates = [e.date for e in events if e.kind is EventKind.JOURNAL]
     assert dates == sorted(dates)
@@ -80,7 +97,9 @@ def test_format_timeline_empty() -> None:
 
 def test_format_timeline_renders_events(project: Path) -> None:
     yesterday = _dt.date.today() - _dt.timedelta(days=1)
-    (project / "planning" / "journal" / f"{yesterday.isoformat()}.md").write_text("note")
+    (project / "planning" / "journal" / f"{yesterday.isoformat()}.md").write_text(
+        "note", encoding="utf-8"
+    )
     events = build_timeline(project)
     text = format_timeline(events, use_color=False)
     assert yesterday.isoformat() in text

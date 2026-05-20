@@ -65,7 +65,7 @@ def test_interview_saves_incrementally(tmp_path: Path) -> None:
 
     # Answer file exists and is non-empty after the run.
     assert answers_path.exists()
-    text = answers_path.read_text()
+    text = answers_path.read_text(encoding="utf-8")
     assert "demo" in text
     assert text.startswith("{")
 
@@ -94,7 +94,8 @@ def test_editor_mode_uses_subprocess(tmp_path: Path) -> None:
         target.write_text(
             "# this line is a comment and should be stripped\n"
             "real answer line one\n"
-            "real answer line two\n"
+            "real answer line two\n",
+            encoding="utf-8",
         )
         return subprocess.CompletedProcess(args=cmd, returncode=0)
 
