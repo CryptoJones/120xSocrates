@@ -220,6 +220,44 @@ def test_pack_html_format_emits_doctype_and_html_tags(project: Path) -> None:
     assert "<h1>" in text
 
 
+def test_pack_html_emits_strict_csp_meta(project: Path) -> None:
+    """Security regression: the HTML bundle must ship a CSP that blocks
+    scripts and other active content. python-markdown passes raw <script>
+    through verbatim — any planning file containing a script-tag example
+    would otherwise execute when the bundle is opened in a browser."""
+    text = build_pack(project, format="html")
+    assert "Content-Security-Policy" in text
+    assert "script-src 'none'" in text
+    assert "object-src 'none'" in text
+    assert "frame-src 'none'" in text
+    assert "base-uri 'none'" in text
+    # default-src 'none' is the catch-all; img-src data: keeps inline
+    # data-URI images possible without enabling arbitrary remote images.
+    assert "default-src 'none'" in text
+
+
+def test_pack_html_passes_script_tags_through_but_csp_blocks_them(
+    project: Path,
+) -> None:
+    """The markdown lib doesn't strip <script> — CSP is the defense.
+    Confirm: a planted <script> shows up in the rendered HTML (so we know
+    the markdown lib didn't silently mutate the input), AND a CSP meta
+    tag is present that would block its execution in any modern browser."""
+    # Plant a script tag in DECISIONS.md (one of the files pack reads).
+    decisions = project / "planning" / "DECISIONS.md"
+    decisions.write_text(
+        decisions.read_text() + "\n\n<script>alert('xss')</script>\n"
+    )
+
+    text = build_pack(project, format="html")
+    # Verify the script tag really did pass through (proving CSP is the
+    # load-bearing defense, not markdown sanitization).
+    assert "<script>alert('xss')</script>" in text
+    # And the CSP meta tag is present to neutralize it.
+    assert 'http-equiv="Content-Security-Policy"' in text
+    assert "script-src 'none'" in text
+
+
 def test_pack_html_format_includes_section_kind_attr(project: Path) -> None:
     text = build_pack(project, format="html")
     # Header section gets a <header> tag with data-kind="header".
