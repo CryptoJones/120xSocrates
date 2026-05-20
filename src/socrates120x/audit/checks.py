@@ -329,7 +329,15 @@ class TerminologyUsedCheck(Check):
             # They risk false-positive matches against unrelated text.
             if len(term) <= 3:
                 continue
-            if term.lower() not in other_text.lower():
+            # Word-boundary regex with kebab-friendly boundary chars (\w + -).
+            # Naive substring search false-positived: a defined term like
+            # "tier" matched "tiers", "outlier", "vintner" in any other file
+            # and silently suppressed the "term defined but unused" warning.
+            pattern = re.compile(
+                rf"(?<![\w-]){re.escape(term)}(?![\w-])",
+                flags=re.IGNORECASE,
+            )
+            if not pattern.search(other_text):
                 findings.append(Finding(
                     check=self.name,
                     severity=Severity.INFO,
