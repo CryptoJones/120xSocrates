@@ -63,8 +63,12 @@ def _synthesize_from_answers(project: Path, answers: dict[str, Any]) -> str:
     top_risks = [str(r) for r in risks_list[:MAX_BULLETS]]
     top_questions = [str(q) for q in open_questions[:MAX_BULLETS]]
 
-    current_sprint = "**001 — Discovery & Architecture**"  # init-rendered projects start here
+    # Pick the highest-numbered sprint directory rather than hardcoding "001".
+    # A project on sprint 005 should not have its WELCOME.md still announce
+    # "001 — Discovery & Architecture" just because answers.json was the
+    # original init record.
     active_sprint_path = _active_sprint_path(project)
+    current_sprint = _format_sprint_label(active_sprint_path)
     return _format_welcome(
         name=name, today=today, tagline=tagline, client=client, tech=tech,
         current_sprint=current_sprint, status=status, next_action=next_action,
@@ -90,7 +94,14 @@ def _synthesize_from_markdown(project: Path) -> str:
     client = _extract_field(agents, "Client") or _extract_field(readme, "Client")
     tech = _extract_field(agents, "Tech stack")
 
-    current_sprint = _extract_section_paragraph(state, "Active sprint") or "_(no active sprint listed)_"
+    # Prefer the sprint directory listing (ground truth) over whatever
+    # STATE.md happens to say, which drifts over time. Fall back to STATE.md
+    # only if no canonical NNN- sprint folders exist.
+    active_sprint_for_label = _active_sprint_path(project)
+    if active_sprint_for_label is not None:
+        current_sprint = _format_sprint_label(active_sprint_for_label)
+    else:
+        current_sprint = _extract_section_paragraph(state, "Active sprint") or "_(no active sprint listed)_"
     status = _extract_section_paragraph(state, "Status") or "_(no current status)_"
     next_action = _extract_section_paragraph(state, "Next action") or "_(no next action)_"
 
@@ -261,11 +272,35 @@ def _active_sprint_path(project: Path) -> Path | None:
     sprints = project / "planning" / "sprints"
     if not sprints.is_dir():
         return None
-    candidates = sorted(p for p in sprints.iterdir() if p.is_dir())
-    # Heuristic: the highest-numbered sprint folder.
-    if not candidates:
+    # Only count folders whose name matches the canonical `NNN-...` pattern;
+    # ignore stray dirs (drafts, backups). Highest number wins.
+    canonical = re.compile(r"^(\d{3})-")
+    numbered = [
+        (int(m.group(1)), p)
+        for p in sprints.iterdir()
+        if p.is_dir() and (m := canonical.match(p.name))
+    ]
+    if not numbered:
         return None
-    return candidates[-1]
+    numbered.sort()
+    return numbered[-1][1]
+
+
+def _format_sprint_label(sprint: Path | None) -> str:
+    """Turn `planning/sprints/005-rebate-engine` into
+    `**005 — Rebate Engine**` for the WELCOME.md header.
+    Returns a placeholder if no sprint folder exists."""
+    if sprint is None:
+        return "_(no sprint folders found — run `socrates init` first or add planning/sprints/NNN-…)_"
+    name = sprint.name  # e.g. "005-rebate-engine" or "001-discovery-architecture"
+    m = re.match(r"^(\d{3})-(.+)$", name)
+    if not m:
+        return f"**{name}**"
+    number = m.group(1)
+    slug = m.group(2)
+    # Convert kebab-case → Title Case for the human label.
+    pretty = " ".join(part.capitalize() for part in slug.split("-"))
+    return f"**{number} — {pretty}**"
 
 
 def _start_pointer(sprint: Path | None) -> str:

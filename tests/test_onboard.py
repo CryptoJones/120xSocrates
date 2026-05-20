@@ -160,3 +160,73 @@ def test_top_bullets_skips_placeholder_lines() -> None:
     # Placeholder italics start with "- _" and we skip those.
     bullets = _top_bullets(text, "Risks", 3)
     assert bullets == ["real risk one"]
+
+
+# ---------------------------------------------------------------------------
+# Active-sprint derivation (bugfix/onboard-derive-active-sprint-from-dirs)
+# ---------------------------------------------------------------------------
+
+
+def test_synthesize_picks_highest_numbered_sprint_not_001(tmp_path) -> None:
+    """A project that has progressed past 001 must not have its WELCOME.md
+    still claim sprint 001 just because answers.json was the init record.
+    """
+    from socrates120x.onboard import synthesize_welcome
+    from socrates120x.render import render_all
+    from socrates120x.scaffold import scaffold
+
+    p = tmp_path / "demo"
+    scaffold(p)
+    render_all(p, {
+        "project_name": "demo", "client": "Acme", "tagline": "demo",
+        "business_goal": "g", "tech_stack": "Python",
+        "users": [], "current_process": "", "terminology": [],
+        "business_rules": [], "decisions": [], "out_of_scope": [],
+        "risks": [], "fragile_inputs": "", "open_questions": [],
+        "sprint1_goal": "", "sprint1_acceptance": [], "sprint1_inspect": [],
+        "state_current": "", "state_next": "", "state_blockers": [],
+    })
+    # Add a sprint 005 directory after init.
+    (p / "planning" / "sprints" / "005-rebate-engine").mkdir()
+    (p / "planning" / "sprints" / "005-rebate-engine" / "requirements.md").write_text(
+        "# requirements\n", encoding="utf-8",
+    )
+
+    text = synthesize_welcome(p)
+    # WELCOME.md must call out sprint 005 — NOT 001.
+    assert "005" in text, "WELCOME.md did not reflect sprint 005"
+    assert "Rebate Engine" in text
+    # The old hardcoded label must NOT appear.
+    assert "001 — Discovery & Architecture" not in text
+
+
+def test_synthesize_ignores_non_canonical_sprint_dirs(tmp_path) -> None:
+    """Stray dirs like `draft/`, `backup-002/`, `notes/` must NOT be picked
+    as the active sprint — they don't match the canonical NNN- prefix."""
+    from socrates120x.onboard import synthesize_welcome
+    from socrates120x.render import render_all
+    from socrates120x.scaffold import scaffold
+
+    p = tmp_path / "demo"
+    scaffold(p)
+    render_all(p, {
+        "project_name": "demo", "client": "Acme", "tagline": "demo",
+        "business_goal": "g", "tech_stack": "Python",
+        "users": [], "current_process": "", "terminology": [],
+        "business_rules": [], "decisions": [], "out_of_scope": [],
+        "risks": [], "fragile_inputs": "", "open_questions": [],
+        "sprint1_goal": "", "sprint1_acceptance": [], "sprint1_inspect": [],
+        "state_current": "", "state_next": "", "state_blockers": [],
+    })
+    sprints = p / "planning" / "sprints"
+    (sprints / "draft").mkdir()
+    (sprints / "backup-002").mkdir()  # leading char is not a digit
+    (sprints / "notes").mkdir()
+
+    text = synthesize_welcome(p)
+    # Only 001 (from init) is canonical — should be the active label.
+    assert "001" in text
+    # Stray dirs must not appear as a sprint label.
+    assert "draft" not in text
+    assert "backup-002" not in text
+    assert "notes" not in text
