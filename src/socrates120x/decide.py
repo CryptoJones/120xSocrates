@@ -31,7 +31,11 @@ def record_decision(project: Path, text: str) -> int:
         )
         return 2
 
-    cleaned = text.strip()
+    # Collapse internal whitespace runs (including newlines, tabs) to single
+    # spaces. A multi-line decision (`socrates decide $'foo\nbar'`) would
+    # otherwise produce a bullet whose closing `**` lands on a different
+    # line, breaking markdown bold rendering and terminating the list item.
+    cleaned = " ".join(text.split())
     if not cleaned:
         print("error: decision text is empty", file=sys.stderr)
         return 2
