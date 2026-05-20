@@ -362,7 +362,53 @@ def main(argv: list[str] | None = None) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _validate_slug(slug: str, *, kind: str = "project") -> str | None:
+    """Return an error message if *slug* would escape its parent directory or
+    is otherwise unsafe to use as a single path component; ``None`` if OK.
+
+    Reject:
+      - empty / whitespace-only slugs (would resolve to the base dir)
+      - slugs containing a path separator (``/`` or ``\\``) — would nest or
+        traverse outside the intended parent
+      - slugs equal to ``.`` or ``..`` or that contain a ``..`` segment
+      - absolute paths (Path("/x") / "/etc" returns "/etc" — the slug wins)
+      - slugs containing NUL bytes (defensive against API misuse)
+
+    Allowed: alphanumeric, dash, underscore, dot (for slugs like ``v0.8.0``
+    or ``.hidden`` if the operator really wants those).
+    """
+    if not slug or not slug.strip():
+        return f"{kind} slug cannot be empty."
+    if "\x00" in slug:
+        return f"{kind} slug cannot contain NUL bytes."
+    if "/" in slug or "\\" in slug:
+        return (
+            f"{kind} slug must be a single path component "
+            f"(no '/' or '\\\\'); got {slug!r}."
+        )
+    # PurePath of an absolute slug yields an absolute path, which would
+    # discard the base when joined with /. Reject explicitly.
+    if Path(slug).is_absolute():
+        return (
+            f"{kind} slug must be relative, not absolute; got {slug!r}. "
+            f"Use --base to choose a different parent directory."
+        )
+    parts = Path(slug).parts
+    if parts and (parts[0] == ".." or any(p == ".." for p in parts)):
+        return (
+            f"{kind} slug cannot contain '..' segments; got {slug!r}. "
+            f"Use --base to choose a different parent directory."
+        )
+    if slug in {".", ".."}:
+        return f"{kind} slug cannot be {slug!r}."
+    return None
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
+    slug_err = _validate_slug(args.project, kind="project")
+    if slug_err:
+        print(f"error: {slug_err}", file=sys.stderr)
+        return 2
     target: Path = args.base.expanduser().resolve() / args.project
 
     if not args.no_scaffold:
