@@ -54,11 +54,18 @@ def _synthesize_from_answers(project: Path, answers: dict[str, Any]) -> str:
     next_action = answers.get("state_next") or "_(no next action)_"
 
     decisions_list = answers.get("decisions") or []
+    # `answers.decisions` is frozen at init time — it does NOT include
+    # post-init decisions appended by `socrates decide`. Read those from
+    # DECISIONS.md's "Decisions added after init" section and prepend so
+    # the freshest decisions appear first in WELCOME.md.
+    post_init = _post_init_decisions(project)
+    combined_decisions = [*post_init, *[str(d) for d in decisions_list]]
+
     out_of_scope = answers.get("out_of_scope") or []
     risks_list = answers.get("risks") or []
     open_questions = answers.get("open_questions") or []
 
-    top_decisions = [str(d) for d in decisions_list[:MAX_BULLETS]]
+    top_decisions = combined_decisions[:MAX_BULLETS]
     top_out_of_scope = [str(o) for o in out_of_scope[:MAX_BULLETS]]
     top_risks = [str(r) for r in risks_list[:MAX_BULLETS]]
     top_questions = [str(q) for q in open_questions[:MAX_BULLETS]]
@@ -105,7 +112,13 @@ def _synthesize_from_markdown(project: Path) -> str:
     status = _extract_section_paragraph(state, "Status") or "_(no current status)_"
     next_action = _extract_section_paragraph(state, "Next action") or "_(no next action)_"
 
-    top_decisions = _top_bullets(decisions, "Decisions captured", MAX_BULLETS)
+    # Combine init + post-init decisions. The markdown DECISIONS.md may have
+    # two sections: 'Decisions captured during Sprint 001 discovery' (init)
+    # AND 'Decisions added after init' (from `socrates decide`). Show the
+    # freshest first.
+    post_init_decisions = _top_bullets(decisions, "Decisions added after init", MAX_BULLETS)
+    init_decisions = _top_bullets(decisions, "Decisions captured", MAX_BULLETS)
+    top_decisions = [*post_init_decisions, *init_decisions][:MAX_BULLETS]
     out_of_scope = _top_bullets(decisions, "Explicitly out of scope", MAX_BULLETS)
     top_risks = _top_bullets(risks, "Risks", MAX_BULLETS)
     top_questions = _top_bullets(questions, "Open", MAX_BULLETS)
@@ -266,6 +279,47 @@ def _bullets_or(items: list[str], fallback: str) -> str:
     if not items:
         return fallback
     return "\n".join(f"- {item}" for item in items)
+
+
+_POST_INIT_BULLET = re.compile(r"^-\s*\*?\*?(.+?)\*?\*?\s*$")
+
+
+def _post_init_decisions(project: Path, limit: int = MAX_BULLETS) -> list[str]:
+    """Read DECISIONS.md and return up to *limit* bullets from the
+    'Decisions added after init' section, most recent first.
+
+    `_synthesize_from_answers` otherwise misses every decision the
+    operator added via `socrates decide` after the initial interview.
+    """
+    decisions_path = project / "planning" / "DECISIONS.md"
+    if not decisions_path.is_file():
+        return []
+    text = decisions_path.read_text(encoding="utf-8", errors="replace")
+    capturing = False
+    items: list[str] = []
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if line.startswith("## "):
+            if capturing:
+                break
+            if "decisions added after init" in line.lower():
+                capturing = True
+            continue
+        if not capturing:
+            continue
+        stripped = line.lstrip()
+        if not stripped.startswith("- "):
+            continue
+        m = _POST_INIT_BULLET.match(stripped)
+        if not m:
+            continue
+        body = m.group(1).strip()
+        if body:
+            items.append(body)
+    # Newest decisions live at the BOTTOM of the section (record_decision
+    # appends). Reverse so WELCOME.md shows the most recent first.
+    items.reverse()
+    return items[:limit]
 
 
 def _active_sprint_path(project: Path) -> Path | None:
