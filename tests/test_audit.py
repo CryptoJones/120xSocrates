@@ -196,15 +196,42 @@ def test_terminology_used_check_flags_orphan_term(clean_project: Path) -> None:
         "## Terminology\n\n"
         "- orphaned-concept — a thing nothing else mentions\n"
         "- live-term — referenced elsewhere\n"
-    )
+    , encoding="utf-8")
     risks = clean_project / "planning" / "RISKS.md"
     risks.write_text(
-        risks.read_text() + "\n\nNote: a live-term issue could surface here."
-    )
+        risks.read_text(encoding="utf-8") + "\n\nNote: a live-term issue could surface here."
+    , encoding="utf-8")
     findings = TerminologyUsedCheck().run(clean_project)
     flagged = {f.message for f in findings}
     assert any("orphaned-concept" in m for m in flagged)
     assert not any("live-term" in m for m in flagged)
+
+
+def test_terminology_no_false_positive_on_substring_match(clean_project: Path) -> None:
+    """A defined term like 'lien' must NOT be considered 'used' just
+    because some other planning file mentions a longer word that contains
+    those letters as a substring (e.g. 'client' contains 'lien').
+
+    Bug: previous naive `term.lower() in other_text.lower()` substring
+    match silently swallowed the warning whenever the term happened to
+    be a substring of an unrelated word. The clean_project fixture
+    already mentions 'client' all over its rendered AGENTS.md / README.md
+    — pre-fix that masked any term named 'lien' from being flagged.
+    """
+    domain = clean_project / "planning" / "DOMAIN.md"
+    domain.write_text(
+        "# DOMAIN\n\n"
+        "## Terminology\n\n"
+        "- lien — a creditor's claim against an asset\n"
+    , encoding="utf-8")
+    # No other planning file genuinely uses 'lien'. clean_project's
+    # rendered files contain plenty of 'client' though.
+    findings = TerminologyUsedCheck().run(clean_project)
+    flagged_terms = [f.message for f in findings]
+    assert any("lien" in m for m in flagged_terms), (
+        "regression: 'lien' was matched by substring inside 'client' "
+        "and silently NOT flagged as orphaned"
+    )
 
 
 # ---------------------------------------------------------------------------
