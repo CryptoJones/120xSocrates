@@ -344,3 +344,54 @@ def test_patterns_review_still_matches_exact_kebab_slug(company: Path) -> None:
     report = review_patterns(company)
     unused_paths = [f.path.name for f in report.findings if f.kind == FindingKind.UNUSED]
     assert "CANDIDATE-validate-numbers.md" not in unused_paths
+
+# ---------------------------------------------------------------------------
+# Atomic cache save (reliability/patterns-cache-atomic-save)
+# ---------------------------------------------------------------------------
+
+
+def test_usage_cache_save_is_atomic_no_tempfile_left(company) -> None:
+    """After a successful run, no .tmp leftover next to the cache."""
+    _make_build(company, "alpha")
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        _pattern(today, "alpha", "x"), encoding="utf-8",
+    )
+    review_patterns(company)  # writes the cache
+    cache = company / "patterns" / ".usage-cache.json"
+    assert cache.is_file()
+    assert not (company / "patterns" / ".usage-cache.json.tmp").exists()
+
+
+def test_usage_cache_save_does_not_clobber_on_failure(
+    company, monkeypatch
+) -> None:
+    """If os.replace fails mid-save, the pre-existing cache must not be
+    truncated/wiped — atomic-write contract."""
+    import socrates120x.patterns as patterns_mod
+
+    _make_build(company, "alpha")
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-x.md").write_text(
+        _pattern(today, "alpha", "x"), encoding="utf-8",
+    )
+    # First run writes a real cache.
+    review_patterns(company)
+    cache = company / "patterns" / ".usage-cache.json"
+    original = cache.read_text(encoding="utf-8")
+
+    # Now patch os.replace to fail and re-run — original cache must survive.
+    def boom(src, dst):
+        raise OSError("simulated replace failure")
+    monkeypatch.setattr(patterns_mod.os, "replace", boom)
+    # Touch a build .md file so the cache would have been rewritten.
+    state = company / "builds" / "alpha" / "planning" / "STATE.md"
+    state.write_text(state.read_text(encoding="utf-8") + "\nedit\n", encoding="utf-8")
+    review_patterns(company)  # must not raise; failed save is swallowed
+
+    # Pre-existing cache is untouched (or has been replaced atomically by
+    # earlier successful writes — but never truncated/empty).
+    survived = cache.read_text(encoding="utf-8")
+    assert survived == original
+    # No stranded tempfile.
+    assert not (company / "patterns" / ".usage-cache.json.tmp").exists()

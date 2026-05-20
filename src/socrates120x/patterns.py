@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import datetime as _dt
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -280,10 +281,26 @@ def _load_usage_cache(patterns_dir: Path) -> dict[str, Any] | None:
 
 
 def _save_usage_cache(patterns_dir: Path, payload: dict[str, Any]) -> None:
+    """Persist the usage cache atomically.
+
+    `socrates patterns review` on a CompanyOS with many projects can take
+    seconds. A SIGINT mid-write would leave a truncated/invalid cache
+    file, which would then crash the next run inside json.loads. Use a
+    same-directory tempfile + os.replace for atomicity (same pattern as
+    interview.py's atomic save) so the cache is either fully old or
+    fully new — never half-written.
+    """
     if not patterns_dir.is_dir():
         return
-    with contextlib.suppress(OSError):
-        (patterns_dir / USAGE_CACHE_FILENAME).write_text(json.dumps(payload, indent=2))
+    target = patterns_dir / USAGE_CACHE_FILENAME
+    tmp = target.with_name(target.name + ".tmp")
+    try:
+        with contextlib.suppress(OSError):
+            tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            os.replace(tmp, target)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
 
 
 def format_pattern_report(report: PatternReport, *, use_color: bool | None = None) -> str:
