@@ -27,7 +27,18 @@ DIRS: tuple[str, ...] = (
 
 
 def scaffold_companyos(target: Path, *, overwrite: bool = False) -> list[Path]:
-    """Create the CompanyOS macro layer at *target*. Returns files written."""
+    """Create the CompanyOS macro layer at *target*. Returns files written.
+
+    Raises NotADirectoryError if *target* is an existing regular file —
+    previously `any(target.iterdir())` cascaded into NotADirectoryError
+    from inside the boolean short-circuit, with a confusing traceback.
+    Reject explicitly with an actionable message.
+    """
+    if target.exists() and target.is_file():
+        raise NotADirectoryError(
+            f"Cannot scaffold CompanyOS into a regular file: {target}. "
+            f"Pass a directory path (it will be created if missing)."
+        )
     if target.exists() and not overwrite and any(target.iterdir()):
         raise FileExistsError(
             f"Refusing to scaffold CompanyOS into non-empty path: {target}"
