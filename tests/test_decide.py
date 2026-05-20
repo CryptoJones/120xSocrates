@@ -107,3 +107,56 @@ def test_decide_timeline_picks_up_new_decision(project: Path) -> None:
     decisions = [e for e in events if e.kind is EventKind.DECISION]
     assert any("Cross-feature choice" in e.title for e in decisions)
     assert any(e.date == _dt.date.today() for e in decisions)
+
+
+# ---------------------------------------------------------------------------
+# Concurrent decide invocations (refactor/shared-atomic-write-and-decide-lock)
+# ---------------------------------------------------------------------------
+
+
+def _concurrent_decide(project_str: str, text: str, hold_ms: int) -> None:
+    """Worker that mimics a slow record_decision under the lock."""
+    import datetime as _dt
+    import time as _t
+
+    from socrates120x._atomic import locked_read_modify_write
+    from socrates120x.decide import _insert_decision
+
+    decisions_path = _Path(project_str) / "planning" / "DECISIONS.md"
+    today = _dt.date.today().isoformat()
+    cleaned = " ".join(text.split())
+    bullet = f"- **{cleaned} ({today})**"
+
+    def mutate(current: str) -> str:
+        _t.sleep(hold_ms / 1000)  # widen the race window
+        return _insert_decision(current, bullet)
+
+    locked_read_modify_write(decisions_path, mutate)
+
+
+# Imported lazily so the worker can reach it; using a private alias to
+# avoid shadowing the project's existing `Path` imports.
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+
+
+@pytest.mark.skipif(
+    _sys.platform == "win32",
+    reason="POSIX fcntl-based locking; Windows path is a graceful no-op",
+)
+def test_decide_concurrent_writes_keep_both_decisions(project: Path) -> None:
+    """Two `socrates decide` invocations running concurrently must not
+    cause a lost update — both decisions land in DECISIONS.md."""
+    from multiprocessing import Process
+
+    p1 = Process(target=_concurrent_decide, args=(str(project), "decision ALPHA", 250))
+    p2 = Process(target=_concurrent_decide, args=(str(project), "decision BETA", 250))
+    p1.start()
+    p2.start()
+    p1.join(timeout=10)
+    p2.join(timeout=10)
+    assert p1.exitcode == 0 and p2.exitcode == 0
+
+    body = (project / "planning" / "DECISIONS.md").read_text(encoding="utf-8")
+    assert "decision ALPHA" in body, "ALPHA decision was lost"
+    assert "decision BETA" in body, "BETA decision was lost"
