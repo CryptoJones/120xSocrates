@@ -36,7 +36,16 @@ In a single command it will:
 # install from source
 git clone https://github.com/CryptoJones/120xSocrates.git
 cd 120xSocrates
+
+# create + activate a virtual environment first, then install into it.
+# (modern Linux/macOS block `pip install` into the system Python with an
+#  "externally-managed-environment" error — the venv is how you avoid that.)
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e .
+
+# note: every new terminal needs `source .venv/bin/activate` before the
+# `socrates` command is on your PATH.
 
 # (optional) scaffold the macro layer once
 socrates companyos ~/Documents/120x
