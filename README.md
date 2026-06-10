@@ -26,7 +26,7 @@ Instead of copy-pasting from a browser chat back into your code editor, `socrate
 In a single command it will:
 
 1. Run the standard 120x scaffold (creating the folder tree and blank files), or use an existing one.
-2. Walk you through ~30 questions covering business goal, users, workflow, data, risks, decisions, and Sprint 001 scope.
+2. Walk you through 19 questions covering business goal, users, workflow, data, risks, decisions, and Sprint 001 scope.
 3. Write the answers into the canonical 120x planning files using the kit's conventions.
 4. Print a punch list of any unresolved questions and what to send to the Architect next.
 
@@ -70,7 +70,7 @@ socrates extract
 
 ## Subcommands
 
-`socrates` ships eleven subcommands. They are designed to be composable —
+`socrates` ships twelve subcommands. They are designed to be composable —
 each one operates on a 120x folder produced by `socrates init` or
 `socrates companyos`.
 
@@ -109,7 +109,7 @@ Scaffolds the 120x folder tree and walks the operator through the Socratic inter
 | `--no-render` | save answers but skip writing the `.md` files |
 | `--editor` | use `$EDITOR` for multi-line answers |
 
-Answers are saved incrementally to `.socrates-answers.json` inside the project folder, so Ctrl-C is safe and `--resume` picks up where you left off.
+Answers are saved incrementally (and atomically — a kill mid-write can never corrupt the file) to `.socrates-answers.json` inside the project folder, so Ctrl-C is safe and `--resume` picks up where you left off. If a resume file is somehow unreadable, socrates warns and starts fresh instead of crashing. Slugs are validated up front: path separators, `..` segments, and absolute paths are rejected before anything touches disk.
 
 #### Editor mode for prose answers
 
@@ -132,7 +132,7 @@ The audit runs eight checks; each was chosen to be high-signal with **zero toler
 |---|---|---|
 | `required-files` | ERROR | one of the canonical planning files is missing |
 | `sprint-folders` | ERROR | a sprint folder is malformed (bad name, missing one of the 4 required files) |
-| `scaffold-shape` | WARNING | a scaffold file was pruned (allowed, but worth noting) |
+| `scaffold-shape` | INFO | a scaffold file was pruned (allowed, but worth noting) |
 | `adapter-routing` | WARNING | `CLAUDE.md` / `CODEX.md` does not point to `AGENTS.md` |
 | `acceptance-weasels` | WARNING | acceptance criteria use vague phrases (`TBD`, `as needed`, `robust enough`, …) |
 | `state-freshness` | WARNING | `STATE.md` has not been touched in 30+ days |
@@ -140,6 +140,12 @@ The audit runs eight checks; each was chosen to be high-signal with **zero toler
 | `terminology-used` | INFO | a term defined in `DOMAIN.md` is not used anywhere else (dead-weight definition) |
 
 Exit codes: `0` clean (info-only is still clean), `1` errors present (or warnings with `--strict`), `2` invocation error.
+
+To silence `scaffold-shape` notices for files you have deliberately pruned, list them in a `.socrates-audit.json` in the project root:
+
+```json
+{"scaffold_shape": {"ignore": ["docs/API.md", "docs/PERMISSIONS.md"]}}
+```
 
 ### `socrates onboard [path]` — synthesize WELCOME.md
 
@@ -154,8 +160,8 @@ socrates onboard . --stdout            # print to stdout instead of writing
 The synthesized WELCOME.md contains:
 
 - Project tagline, client, tech stack
-- Active sprint, current status, next action
-- The 3 most load-bearing decisions, 3 explicitly out-of-scope items
+- Active sprint (derived from the highest-numbered `planning/sprints/NNN-*` folder, not a stale label), current status, next action
+- The 3 most load-bearing decisions — including any added after init via `socrates decide`, freshest first — and 3 explicitly out-of-scope items
 - The 3 most prominent risks and open questions
 - A pointer to the active sprint folder and the three files to read next
 
@@ -163,7 +169,7 @@ The output is auto-generated. Re-run `socrates onboard` whenever planning state 
 
 ### `socrates journal [path]` — append-only daily log
 
-Creates today's `planning/journal/YYYY-MM-DD.md` entry (with a short template) and opens `$EDITOR` so you can fill it in. The journal **complements** `STATE.md`: STATE is the rolling snapshot, journal entries are immutable historical fragments.
+Creates today's `planning/journal/YYYY-MM-DD.md` entry (with a short template) and opens `$EDITOR` so you can fill it in. The journal **complements** `STATE.md`: STATE is the rolling snapshot, journal entries are immutable historical fragments. Only canonically named `YYYY-MM-DD.md` files count as entries — stray notes dropped into the folder are ignored by `--show` and `--list`.
 
 ```bash
 socrates journal                       # create + open today's entry
@@ -209,7 +215,7 @@ socrates pack --format html            # full HTML (requires the [html] extra)
 | `--kit-path PATH` | also embed the kit's three load-bearing files (or use `$SOCRATES_KIT_PATH`) |
 | `--format md\|html\|xml` | output format. `md` (default), `xml` (markdown wrapped in `<section>` tags — matches Anthropic's prompt-engineering recommendation), `html` (full HTML, requires `pip install socrates120x[html]`) |
 
-The output file extension follows the format: `.md`, `.xml`, or `.html`. The default `md` keeps the historical behavior. `xml` adds ~5% token overhead but gives the Architect explicit structural delimiters. `html` adds ~30-50% token overhead and requires the optional `markdown` dependency — use it when you're explicitly testing whether full HTML helps the Architect on your specific content.
+The output file extension follows the format: `.md`, `.xml`, or `.html`. The default `md` keeps the historical behavior. `xml` adds ~5% token overhead but gives the Architect explicit structural delimiters. `html` adds ~30-50% token overhead and requires the optional `markdown` dependency — use it when you're explicitly testing whether full HTML helps the Architect on your specific content. HTML output carries a strict Content-Security-Policy meta tag (no scripts, frames, or external resources), so previewing a bundle that contains pasted third-party content cannot execute anything in your browser.
 
 ### `socrates companyos <path>` — scaffold the macro layer
 
@@ -253,6 +259,8 @@ The implementation is eight modules grouped by role, reading in dependency layer
 | `patterns.py` | the pattern lifecycle: extract (create) + review (drift) |
 | `synthesize.py` | derived docs: onboard (WELCOME.md) + pack (Architect bundle) |
 | `cli.py` | argparse wiring and dispatch |
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the dependency rule, the load-bearing invariants (kit byte-compatibility, atomic writes, no-false-positive audits), and the on-disk data files.
 
 The folder structure socrates produces matches the [120x Operators Kit](https://120x.ai) scaffold byte-for-byte, but socrates does not require the kit to be installed locally — the structure is baked in.
 

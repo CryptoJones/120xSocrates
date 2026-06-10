@@ -463,7 +463,7 @@ def _print_intro(project: str) -> None:
     print(f"Project: {project}")
     print()
     print("How this works:")
-    print("  • You'll be asked ~18 questions, grouped by section.")
+    print("  • You'll be asked 19 questions, grouped by section.")
     print("  • For multi-line answers, type your text and finish with a single '.'")
     print("  • For list answers, one item per line; empty line to finish.")
     print("  • Press Ctrl-C anytime — your answers are saved; resume with --resume.")
