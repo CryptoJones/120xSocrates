@@ -7,10 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.companyos import scaffold_companyos
-from socrates120x.render import render_all
-from socrates120x.scaffold import scaffold
-from socrates120x.status import companyos_status, format_status
+from socrates120x import companyos_status, format_status, render_all, scaffold, scaffold_companyos
 
 
 def _populate_build(builds_dir: Path, name: str, *, tagline: str = "demo") -> Path:

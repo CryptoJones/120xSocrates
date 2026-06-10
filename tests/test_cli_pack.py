@@ -3,7 +3,7 @@
 The argparse wiring in cli.py was previously untested at the CLI level
 (the project has unit tests for build_pack/write_pack but nothing that
 exercises the actual `socrates pack` argparse path). These tests drive
-``socrates120x.cli.main`` end-to-end so a regression in the CLI plumbing
+``socrates120x.main`` end-to-end so a regression in the CLI plumbing
 (dest names, choices, defaults, the markdown-missing error path) gets
 caught in CI.
 """
@@ -14,9 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.cli import main
-from socrates120x.render import render_all
-from socrates120x.scaffold import scaffold
+from socrates120x import main, render_all, scaffold
 
 
 @pytest.fixture
@@ -94,7 +92,7 @@ def test_pack_format_html_error_when_markdown_missing(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Exercise the CLI's RuntimeError handling for the missing-markdown path."""
-    import socrates120x.pack as pack_module
+    import socrates120x as pack_module
 
     def _raise() -> None:
         raise RuntimeError(

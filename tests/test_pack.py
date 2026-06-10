@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.pack import (
+from socrates120x import (
     SUPPORTED_FORMATS,
     build_pack,
+    render_all,
+    scaffold,
     write_pack,
 )
-from socrates120x.render import render_all
-from socrates120x.scaffold import scaffold
 
 
 @pytest.fixture
@@ -296,7 +296,7 @@ def test_pack_html_format_error_when_markdown_missing(
     # Simulate the markdown package not being installed by making the
     # internal import helper raise. This avoids actually uninstalling the
     # dev-dep used by other tests.
-    import socrates120x.pack as pack_module
+    import socrates120x as pack_module
 
     def _raise() -> None:
         raise RuntimeError(

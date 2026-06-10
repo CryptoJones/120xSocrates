@@ -241,6 +241,8 @@ Questions you cannot answer are written verbatim to `QUESTIONS.md` rather than g
 
 - Python 3.10+. No third-party dependencies for runtime; just the standard library.
 
+The entire implementation is a single file — [`src/socrates120x.py`](src/socrates120x.py) — designed to be read top to bottom. No package tree, no abstraction layers: prompting → interview → scaffold → render → audit → the rest of the subcommands → CLI.
+
 The folder structure socrates produces matches the [120x Operators Kit](https://120x.ai) scaffold byte-for-byte, but socrates does not require the kit to be installed locally — the structure is baked in.
 
 ## Why this exists

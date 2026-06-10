@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
-from socrates120x.prompting import Question, ask, editor_command
+from socrates120x import Question, ask, editor_command
 
 
 class _FakeIO:
@@ -73,7 +73,7 @@ def test_editor_command_falls_back_when_unset() -> None:
 def test_editor_command_parses_quoted_args(monkeypatch) -> None:
     """`EDITOR="emacsclient -a 'emacs'"` must split to 3 elements, not 3
     elements where the last has stray quotes."""
-    from socrates120x.prompting import editor_command
+    from socrates120x import editor_command
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.setenv("EDITOR", "emacsclient -a 'emacs'")
     cmd = editor_command()
@@ -85,7 +85,7 @@ def test_editor_command_parses_quoted_args(monkeypatch) -> None:
 
 def test_editor_command_handles_double_quoted_path(monkeypatch) -> None:
     """A path with spaces wrapped in double quotes must survive."""
-    from socrates120x.prompting import editor_command
+    from socrates120x import editor_command
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.setenv("EDITOR", '"C:/Program Files/Editor/run.exe" --wait')
     cmd = editor_command()
@@ -95,7 +95,7 @@ def test_editor_command_handles_double_quoted_path(monkeypatch) -> None:
 def test_editor_command_recovers_from_unbalanced_quotes(monkeypatch) -> None:
     """A malformed EDITOR string (unbalanced quote) shouldn't crash —
     fall back to naive split rather than returning None silently."""
-    from socrates120x.prompting import editor_command
+    from socrates120x import editor_command
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.setenv("EDITOR", "broken 'arg")
     cmd = editor_command()

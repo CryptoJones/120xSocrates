@@ -6,9 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.companyos import scaffold_companyos
-from socrates120x.extract import _resolve_patterns_dir, _sanitize_slug, render_pattern
-from socrates120x.scaffold import scaffold
+from socrates120x import (
+    _resolve_patterns_dir,
+    _sanitize_slug,
+    render_pattern,
+    scaffold,
+    scaffold_companyos,
+)
 
 
 def test_sanitize_slug_cleans_input() -> None:

@@ -7,9 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.render import render_all
-from socrates120x.scaffold import scaffold
-from socrates120x.ship import CheckResult, preflight
+from socrates120x import CheckResult, preflight, render_all, scaffold
 
 
 @pytest.fixture

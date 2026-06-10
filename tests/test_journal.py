@@ -11,8 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from socrates120x.journal import create_or_open_entry
-from socrates120x.scaffold import scaffold
+from socrates120x import create_or_open_entry, scaffold
 
 
 @pytest.fixture
@@ -80,8 +79,7 @@ def test_journal_list_ignores_non_dated_files(tmp_path, capsys) -> None:
     """`socrates journal --list` must NOT enumerate notes.md, ideas.md,
     drafts/ etc. that the operator may have dropped into the journal dir.
     Only files named YYYY-MM-DD.md count."""
-    from socrates120x.journal import create_or_open_entry
-    from socrates120x.scaffold import scaffold
+    from socrates120x import create_or_open_entry, scaffold
 
     p = tmp_path / "demo"
     scaffold(p)
@@ -110,8 +108,7 @@ def test_journal_list_ignores_non_dated_files(tmp_path, capsys) -> None:
 def test_journal_show_picks_latest_dated_not_arbitrary(tmp_path, capsys) -> None:
     """`--show` must pick the LATEST dated entry, not whatever sorts last
     alphabetically (which would include notes.md)."""
-    from socrates120x.journal import create_or_open_entry
-    from socrates120x.scaffold import scaffold
+    from socrates120x import create_or_open_entry, scaffold
 
     p = tmp_path / "demo"
     scaffold(p)
