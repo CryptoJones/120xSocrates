@@ -33,7 +33,7 @@ html = [
 ]
 
 [project.scripts]
-socrates = "socrates120x:main"
+socrates = "socrates120x.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/CryptoJones/120xSocrates"
@@ -45,10 +45,8 @@ Issues = "https://github.com/CryptoJones/120xSocrates/issues"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# The whole tool is one module: src/socrates120x.py.
 [tool.hatch.build.targets.wheel]
-only-include = ["src/socrates120x.py"]
-sources = ["src"]
+packages = ["src/socrates120x"]
 
 [tool.ruff]
 target-version = "py310"

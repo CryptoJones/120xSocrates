@@ -42,7 +42,7 @@ def test_atomic_write_text_does_not_clobber_on_rename_failure(
     target = tmp_path / "out.txt"
     target.write_text("ORIGINAL — do not lose me", encoding="utf-8")
 
-    import socrates120x as atomic_mod
+    import socrates120x.support as atomic_mod
 
     def boom(src: object, dst: object) -> None:
         raise OSError("simulated replace failure")

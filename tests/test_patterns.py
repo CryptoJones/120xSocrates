@@ -372,7 +372,7 @@ def test_usage_cache_save_does_not_clobber_on_failure(
 ) -> None:
     """If os.replace fails mid-save, the pre-existing cache must not be
     truncated/wiped — atomic-write contract."""
-    import socrates120x as patterns_mod
+    import socrates120x.patterns as patterns_mod
 
     _make_build(company, "alpha")
     today = _dt.date.today().isoformat()

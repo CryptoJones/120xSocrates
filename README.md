@@ -241,7 +241,18 @@ Questions you cannot answer are written verbatim to `QUESTIONS.md` rather than g
 
 - Python 3.10+. No third-party dependencies for runtime; just the standard library.
 
-The entire implementation is a single file — [`src/socrates120x.py`](src/socrates120x.py) — designed to be read top to bottom. No package tree, no abstraction layers: prompting → interview → scaffold → render → audit → the rest of the subcommands → CLI.
+The implementation is eight modules grouped by role, reading in dependency layers (each file is digestible on its own; [`cli.py`](src/socrates120x/cli.py) is the main file that calls the rest):
+
+| Module | Role |
+|---|---|
+| `support.py` | plumbing: terminal colors, atomic file I/O, prompting primitives — no 120x knowledge |
+| `kit.py` | the canonical 120x shapes: scaffold, planning-file renderers, CompanyOS layer |
+| `interview.py` | the init question set + resumable runner |
+| `audit.py` | findings model + every check + runner + report |
+| `operate.py` | daily rituals: decide, journal, timeline, ship, status |
+| `patterns.py` | the pattern lifecycle: extract (create) + review (drift) |
+| `synthesize.py` | derived docs: onboard (WELCOME.md) + pack (Architect bundle) |
+| `cli.py` | argparse wiring and dispatch |
 
 The folder structure socrates produces matches the [120x Operators Kit](https://120x.ai) scaffold byte-for-byte, but socrates does not require the kit to be installed locally — the structure is baked in.
 
