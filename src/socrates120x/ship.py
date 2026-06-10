@@ -137,7 +137,7 @@ def _extract_check(project: Path) -> ShipFinding:
         if not loc.is_dir():
             continue
         for f in loc.glob("CANDIDATE-*.md"):
-            text = f.read_text(errors="replace")
+            text = f.read_text(errors="replace", encoding="utf-8")
             if f"`{project.name}`" in text:
                 found = True
                 break
@@ -180,7 +180,7 @@ def _state_check(project: Path) -> ShipFinding:
     answers_path = project / ".socrates-answers.json"
     if answers_path.is_file():
         try:
-            data = json.loads(answers_path.read_text())
+            data = json.loads(answers_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             data = None
         if isinstance(data, dict) and data.get("state_next"):
@@ -189,7 +189,7 @@ def _state_check(project: Path) -> ShipFinding:
             pass
     # Fall back to recency check via the embedded date.
     import re
-    m = re.search(r"Last updated:\s*(\d{4}-\d{2}-\d{2})", state.read_text(errors="replace"))
+    m = re.search(r"Last updated:\s*(\d{4}-\d{2}-\d{2})", state.read_text(errors="replace", encoding="utf-8"))
     if not m:
         return ShipFinding(
             name="state",

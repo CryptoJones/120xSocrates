@@ -43,7 +43,7 @@ def create_or_open_entry(project: Path, *, show: bool = False, list_all: bool = 
     entry = journal_dir / f"{today}.md"
     is_new = not entry.exists()
     if is_new:
-        entry.write_text(_template(today))
+        entry.write_text(_template(today), encoding="utf-8")
         print(f"Created {entry}")
 
     cmd = editor_command()

@@ -173,7 +173,7 @@ def _ask_multiline_editor(
     try:
         output_fn(f"   (opening {editor[0]} — save & quit to submit)")
         subprocess.run([*editor, str(tmp_path)], check=True)
-        raw = tmp_path.read_text()
+        raw = tmp_path.read_text(encoding="utf-8")
     finally:
         with contextlib.suppress(OSError):
             tmp_path.unlink()

@@ -46,7 +46,7 @@ def _atomic_write_text(path: Path, text: str) -> None:
     """
     tmp = path.with_name(path.name + ".tmp")
     try:
-        tmp.write_text(text)
+        tmp.write_text(text, encoding="utf-8")
         # os.replace is atomic across filesystems on the same device; if the
         # tempfile lives in the same dir as the target (which it does here),
         # we're always on the same device.
@@ -231,7 +231,7 @@ class Interview:
         if not (self.answers_path.exists() and self.resume):
             return
         try:
-            self.answers = json.loads(self.answers_path.read_text())
+            self.answers = json.loads(self.answers_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as e:
             print(
                 f"warning: could not read {self.answers_path}: {e}\n"

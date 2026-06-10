@@ -86,7 +86,7 @@ def review_patterns(companyos_root: Path, *, use_cache: bool = True) -> PatternR
             candidates += 1
         else:
             promoted += 1
-        body = pattern.read_text(errors="replace")
+        body = pattern.read_text(errors="replace", encoding="utf-8")
         source = _extract_source_project(body)
         extracted = _extract_extracted_date(body)
 
@@ -238,7 +238,7 @@ def _slug_in_project(slug: str, project_dir: Path) -> bool:
     )
     for f in project_dir.rglob("*.md"):
         try:
-            text = f.read_text(errors="replace")
+            text = f.read_text(errors="replace", encoding="utf-8")
         except OSError:
             continue
         if pattern.search(text):
@@ -268,7 +268,7 @@ def _load_usage_cache(patterns_dir: Path) -> dict[str, Any] | None:
     if not cache_path.is_file():
         return None
     try:
-        data = json.loads(cache_path.read_text())
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(data, dict):

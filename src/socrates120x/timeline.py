@@ -91,7 +91,7 @@ def _journal_events(project: Path) -> list[TimelineEvent]:
             d = _dt.date.fromisoformat(entry.stem)
         except ValueError:
             continue
-        first_line = _first_real_line(entry.read_text(errors="replace"))
+        first_line = _first_real_line(entry.read_text(errors="replace", encoding="utf-8"))
         events.append(TimelineEvent(
             date=d,
             kind=EventKind.JOURNAL,
@@ -119,7 +119,7 @@ def _sprint_events(project: Path) -> list[TimelineEvent]:
         req = sprint / "requirements.md"
         detail = ""
         if req.is_file():
-            detail = _extract_goal(req.read_text(errors="replace"))
+            detail = _extract_goal(req.read_text(errors="replace", encoding="utf-8"))
         events.append(TimelineEvent(
             date=mtime,
             kind=EventKind.SPRINT,
@@ -148,7 +148,7 @@ def _decision_events(project: Path) -> list[TimelineEvent]:
     if not decisions_file.is_file():
         return []
     events: list[TimelineEvent] = []
-    for line in decisions_file.read_text(errors="replace").splitlines():
+    for line in decisions_file.read_text(errors="replace", encoding="utf-8").splitlines():
         stripped = line.lstrip()
         if not stripped.startswith("- "):
             continue

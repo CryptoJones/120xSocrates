@@ -33,14 +33,14 @@ def project(tmp_path: Path) -> Path:
 def test_decide_appends_dated_bullet(project: Path) -> None:
     code = record_decision(project, "New choice Y — because Z")
     assert code == 0
-    body = (project / "planning" / "DECISIONS.md").read_text()
+    body = (project / "planning" / "DECISIONS.md").read_text(encoding="utf-8")
     today = _dt.date.today().isoformat()
     assert f"New choice Y — because Z ({today})" in body
 
 
 def test_decide_creates_post_init_section(project: Path) -> None:
     record_decision(project, "First post-init choice")
-    body = (project / "planning" / "DECISIONS.md").read_text()
+    body = (project / "planning" / "DECISIONS.md").read_text(encoding="utf-8")
     assert "## Decisions added after init" in body
     # The new section must appear BEFORE the out-of-scope section.
     post_init_idx = body.index("## Decisions added after init")
@@ -51,7 +51,7 @@ def test_decide_creates_post_init_section(project: Path) -> None:
 def test_decide_reuses_existing_post_init_section(project: Path) -> None:
     record_decision(project, "First post-init choice")
     record_decision(project, "Second post-init choice")
-    body = (project / "planning" / "DECISIONS.md").read_text()
+    body = (project / "planning" / "DECISIONS.md").read_text(encoding="utf-8")
     # There should be exactly ONE 'Decisions added after init' heading.
     assert body.count("## Decisions added after init") == 1
     # Both bullets should be present in that section.
@@ -63,7 +63,7 @@ def test_decide_reuses_existing_post_init_section(project: Path) -> None:
 
 def test_decide_preserves_sprint1_section(project: Path) -> None:
     record_decision(project, "Post-init choice")
-    body = (project / "planning" / "DECISIONS.md").read_text()
+    body = (project / "planning" / "DECISIONS.md").read_text(encoding="utf-8")
     # The original Sprint 001 section must still exist with its decision.
     assert "## Decisions captured during Sprint 001 discovery" in body
     assert "Initial choice X — reason" in body
@@ -90,7 +90,7 @@ def test_decide_collapses_internal_whitespace_to_keep_bullet_single_line(
         "first line\n  second line\t\twith tabs\n\n\nthird line",
     )
     assert code == 0
-    body = (project / "planning" / "DECISIONS.md").read_text()
+    body = (project / "planning" / "DECISIONS.md").read_text(encoding="utf-8")
     today = _dt.date.today().isoformat()
     expected_bullet = f"- **first line second line with tabs third line ({today})**"
     assert expected_bullet in body
