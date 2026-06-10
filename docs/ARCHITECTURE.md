@@ -54,6 +54,13 @@ sideways, not upward, and exists so the format is defined once.
 use `from socrates120x import X` without coupling to the internal layout.
 Carving, merging, or renaming modules must not change that import surface.
 
+## Naming
+
+Three names, one thing, all intentional: **120xSocrates** is the repo and
+human-facing name, **socrates120x** is the Python distribution/package (a
+leading digit is not a valid Python identifier), and **socrates** is the
+installed command (short, because operators type it daily). Don't "fix" this.
+
 ## Invariants (the load-bearing properties)
 
 1. **Kit compatibility.** Generated artifacts — scaffold tree, rendered
