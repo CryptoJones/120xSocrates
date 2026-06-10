@@ -149,7 +149,7 @@ def test_save_does_not_leave_partial_file_on_failure(
     iv.answers = {"new": "value"}
 
     # Make os.replace fail so we hit the cleanup path.
-    import socrates120x as iv_mod
+    import socrates120x.support as iv_mod
     real_replace = iv_mod.os.replace
     def boom(src: object, dst: object) -> None:
         raise OSError("simulated replace failure")

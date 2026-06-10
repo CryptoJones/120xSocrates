@@ -296,7 +296,7 @@ def test_pack_html_format_error_when_markdown_missing(
     # Simulate the markdown package not being installed by making the
     # internal import helper raise. This avoids actually uninstalling the
     # dev-dep used by other tests.
-    import socrates120x as pack_module
+    import socrates120x.synthesize as pack_module
 
     def _raise() -> None:
         raise RuntimeError(

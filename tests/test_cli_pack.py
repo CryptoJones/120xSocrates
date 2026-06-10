@@ -92,7 +92,7 @@ def test_pack_format_html_error_when_markdown_missing(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Exercise the CLI's RuntimeError handling for the missing-markdown path."""
-    import socrates120x as pack_module
+    import socrates120x.synthesize as pack_module
 
     def _raise() -> None:
         raise RuntimeError(
