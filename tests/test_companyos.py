@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.companyos import DIRS, scaffold_companyos
+from socrates120x import COMPANYOS_DIRS, scaffold_companyos
 
 
 def test_companyos_scaffold_creates_full_macro_tree(tmp_path: Path) -> None:
@@ -14,10 +14,10 @@ def test_companyos_scaffold_creates_full_macro_tree(tmp_path: Path) -> None:
     written = scaffold_companyos(target)
 
     assert target.is_dir()
-    for d in DIRS:
+    for d in COMPANYOS_DIRS:
         assert (target / d).is_dir(), f"missing dir: {d}"
     # Spot check: every dir has at least a README.md.
-    for d in DIRS:
+    for d in COMPANYOS_DIRS:
         assert (target / d / "README.md").is_file(), f"missing README.md in {d}"
     assert (target / "AGENTS.md").is_file()
     assert (target / "CLAUDE.md").is_file()
@@ -56,7 +56,7 @@ def test_companyos_rejects_file_target(tmp_path) -> None:
     fail up-front, not midway through the per-file write loop."""
     import pytest
 
-    from socrates120x.companyos import scaffold_companyos
+    from socrates120x import scaffold_companyos
 
     file_path = tmp_path / "co.txt"
     file_path.write_text("operator's notes", encoding="utf-8")
@@ -69,7 +69,7 @@ def test_cli_companyos_handles_file_target_gracefully(tmp_path, capsys) -> None:
     """CLI entry point must catch NotADirectoryError too, not just FileExistsError.
     Pre-fix the new validation in scaffold_companyos crashed the CLI with a
     stacktrace because _cmd_companyos only caught FileExistsError."""
-    from socrates120x.cli import main
+    from socrates120x import main
 
     file_path = tmp_path / "operators-notes.txt"
     file_path.write_text("user content", encoding="utf-8")

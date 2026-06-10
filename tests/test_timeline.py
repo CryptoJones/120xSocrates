@@ -7,9 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.render import render_all
-from socrates120x.scaffold import scaffold
-from socrates120x.timeline import EventKind, build_timeline, format_timeline
+from socrates120x import EventKind, build_timeline, format_timeline, render_all, scaffold
 
 
 @pytest.fixture

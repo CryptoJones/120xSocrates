@@ -7,10 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.companyos import scaffold_companyos
-from socrates120x.patterns import FindingKind, format_pattern_report, review_patterns
-from socrates120x.render import render_all
-from socrates120x.scaffold import scaffold
+from socrates120x import (
+    FindingKind,
+    format_pattern_report,
+    render_all,
+    review_patterns,
+    scaffold,
+    scaffold_companyos,
+)
 
 
 def _pattern(text_date: str, source: str, slug: str, candidate: bool = True) -> str:
@@ -368,7 +372,7 @@ def test_usage_cache_save_does_not_clobber_on_failure(
 ) -> None:
     """If os.replace fails mid-save, the pre-existing cache must not be
     truncated/wiped — atomic-write contract."""
-    import socrates120x.patterns as patterns_mod
+    import socrates120x as patterns_mod
 
     _make_build(company, "alpha")
     today = _dt.date.today().isoformat()

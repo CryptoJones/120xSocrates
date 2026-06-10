@@ -13,20 +13,21 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.audit import format_report, run_audit
-from socrates120x.audit.checks import (
-    AdapterPointsToAgentsCheck,
-    AlwaysOnRisksCheck,
-    RequiredFilesCheck,
-    ScaffoldShapeCheck,
-    SprintFolderCheck,
-    StateFreshnessCheck,
-    TerminologyUsedCheck,
-    WeaselWordsCheck,
+from socrates120x import (
+    Severity,
+    check_acceptance_weasels,
+    check_adapter_routing,
+    check_always_on_risks,
+    check_required_files,
+    check_scaffold_shape,
+    check_sprint_folders,
+    check_state_freshness,
+    check_terminology_used,
+    format_report,
+    render_all,
+    run_audit,
+    scaffold,
 )
-from socrates120x.audit.model import Severity
-from socrates120x.render import render_all
-from socrates120x.scaffold import scaffold
 
 
 def _clean_answers() -> dict:
@@ -98,7 +99,7 @@ def test_audit_runs_every_check(clean_project: Path) -> None:
 
 def test_required_files_check_fires_on_missing(clean_project: Path) -> None:
     (clean_project / "planning" / "STATE.md").unlink()
-    findings = RequiredFilesCheck().run(clean_project)
+    findings = check_required_files(clean_project)
     assert any("STATE.md" in f.message for f in findings)
     assert all(f.severity is Severity.ERROR for f in findings)
 
@@ -106,7 +107,7 @@ def test_required_files_check_fires_on_missing(clean_project: Path) -> None:
 def test_scaffold_shape_check_emits_info_on_pruning(clean_project: Path) -> None:
     """Pruning is allowed — the check is INFO, not WARNING, to keep audit quiet."""
     (clean_project / "docs" / "API.md").unlink()
-    findings = ScaffoldShapeCheck().run(clean_project)
+    findings = check_scaffold_shape(clean_project)
     assert any("API.md" in f.message for f in findings)
     assert all(f.severity is Severity.INFO for f in findings)
 
@@ -119,7 +120,7 @@ def test_scaffold_shape_check_honours_skip_list(clean_project: Path) -> None:
     (clean_project / ".socrates-audit.json").write_text(
         json.dumps({"scaffold_shape": {"ignore": ["docs/API.md"]}})
     , encoding="utf-8")
-    findings = ScaffoldShapeCheck().run(clean_project)
+    findings = check_scaffold_shape(clean_project)
     messages = [f.message for f in findings]
     # API.md was ignored; PERMISSIONS.md still fires.
     assert not any("API.md" in m for m in messages)
@@ -131,7 +132,7 @@ def test_sprint_folder_check_flags_bad_name(clean_project: Path) -> None:
     bad.mkdir()
     for fname in ("requirements.md", "blueprint.md", "acceptance.md", "handoff-prompt.md"):
         (bad / fname).touch()
-    findings = SprintFolderCheck().run(clean_project)
+    findings = check_sprint_folders(clean_project)
     assert any("next-thing" in f.message and "NNN-slug" in f.message for f in findings)
 
 
@@ -139,7 +140,7 @@ def test_sprint_folder_check_flags_missing_files(clean_project: Path) -> None:
     sprint = clean_project / "planning" / "sprints" / "002-rebate-engine"
     sprint.mkdir()
     (sprint / "requirements.md").touch()
-    findings = SprintFolderCheck().run(clean_project)
+    findings = check_sprint_folders(clean_project)
     messages = [f.message for f in findings]
     for missing in ("blueprint.md", "acceptance.md", "handoff-prompt.md"):
         assert any(missing in m for m in messages), f"expected {missing} to be flagged"
@@ -147,7 +148,7 @@ def test_sprint_folder_check_flags_missing_files(clean_project: Path) -> None:
 
 def test_adapter_check_fires_when_pointer_missing(clean_project: Path) -> None:
     (clean_project / "CLAUDE.md").write_text("# This file does not mention the router.", encoding="utf-8")
-    findings = AdapterPointsToAgentsCheck().run(clean_project)
+    findings = check_adapter_routing(clean_project)
     assert any("CLAUDE.md" in f.message for f in findings)
 
 
@@ -159,7 +160,7 @@ def test_weasel_words_check_fires(clean_project: Path) -> None:
         "- Tests pass as needed.\n"
         "- DOMAIN.md reflects client terminology.\n"  # this line is clean
     , encoding="utf-8")
-    findings = WeaselWordsCheck().run(clean_project)
+    findings = check_acceptance_weasels(clean_project)
     assert len(findings) == 2
     assert {f.line for f in findings} == {3, 4}
 
@@ -168,21 +169,21 @@ def test_state_freshness_check_fires_on_old_date(clean_project: Path) -> None:
     state = clean_project / "planning" / "STATE.md"
     old = (_dt.date.today() - _dt.timedelta(days=120)).isoformat()
     state.write_text(f"# STATE\n\n_Last updated: {old}_\n", encoding="utf-8")
-    findings = StateFreshnessCheck().run(clean_project)
+    findings = check_state_freshness(clean_project)
     assert len(findings) == 1
     assert "120 days ago" in findings[0].message
 
 
 def test_state_freshness_check_quiet_when_fresh(clean_project: Path) -> None:
     # The default render writes today's date, so a clean run should be silent.
-    findings = StateFreshnessCheck().run(clean_project)
+    findings = check_state_freshness(clean_project)
     assert findings == []
 
 
 def test_always_on_risks_check_fires_when_missing(clean_project: Path) -> None:
     risks = clean_project / "planning" / "RISKS.md"
     risks.write_text("# RISKS\n\n- Some project-specific risk only.\n", encoding="utf-8")
-    findings = AlwaysOnRisksCheck().run(clean_project)
+    findings = check_always_on_risks(clean_project)
     assert len(findings) == 1
     assert "source of truth" in findings[0].message.lower()
 
@@ -201,7 +202,7 @@ def test_terminology_used_check_flags_orphan_term(clean_project: Path) -> None:
     risks.write_text(
         risks.read_text(encoding="utf-8") + "\n\nNote: a live-term issue could surface here."
     , encoding="utf-8")
-    findings = TerminologyUsedCheck().run(clean_project)
+    findings = check_terminology_used(clean_project)
     flagged = {f.message for f in findings}
     assert any("orphaned-concept" in m for m in flagged)
     assert not any("live-term" in m for m in flagged)
@@ -226,7 +227,7 @@ def test_terminology_no_false_positive_on_substring_match(clean_project: Path) -
     , encoding="utf-8")
     # No other planning file genuinely uses 'lien'. clean_project's
     # rendered files contain plenty of 'client' though.
-    findings = TerminologyUsedCheck().run(clean_project)
+    findings = check_terminology_used(clean_project)
     flagged_terms = [f.message for f in findings]
     assert any("lien" in m for m in flagged_terms), (
         "regression: 'lien' was matched by substring inside 'client' "

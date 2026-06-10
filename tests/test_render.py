@@ -1,7 +1,6 @@
 from pathlib import Path
 
-from socrates120x.render import render_all
-from socrates120x.scaffold import scaffold
+from socrates120x import render_all, scaffold
 
 
 def _sample_answers() -> dict:

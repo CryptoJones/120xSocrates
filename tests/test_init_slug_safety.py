@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.cli import _validate_slug, main
+from socrates120x import _validate_slug, main
 
 
 @pytest.mark.parametrize(

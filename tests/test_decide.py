@@ -7,9 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.decide import record_decision
-from socrates120x.render import render_all
-from socrates120x.scaffold import scaffold
+from socrates120x import record_decision, render_all, scaffold
 
 
 @pytest.fixture
@@ -101,7 +99,7 @@ def test_decide_collapses_internal_whitespace_to_keep_bullet_single_line(
 def test_decide_timeline_picks_up_new_decision(project: Path) -> None:
     """End-to-end: the date stamp `socrates decide` writes is the one
     `socrates timeline` reads."""
-    from socrates120x.timeline import EventKind, build_timeline
+    from socrates120x import EventKind, build_timeline
     record_decision(project, "Cross-feature choice — for posterity")
     events = build_timeline(project)
     decisions = [e for e in events if e.kind is EventKind.DECISION]
@@ -119,8 +117,7 @@ def _concurrent_decide(project_str: str, text: str, hold_ms: int) -> None:
     import datetime as _dt
     import time as _t
 
-    from socrates120x._atomic import locked_read_modify_write
-    from socrates120x.decide import _insert_decision
+    from socrates120x import _insert_decision, locked_read_modify_write
 
     decisions_path = _Path(project_str) / "planning" / "DECISIONS.md"
     today = _dt.date.today().isoformat()

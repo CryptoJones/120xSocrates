@@ -1,4 +1,4 @@
-"""Tests for socrates120x._atomic — the shared atomic-write + lock helpers."""
+"""Tests for socrates120x atomic helpers — the shared atomic-write + lock helpers."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x._atomic import atomic_write_text, locked_read_modify_write
+from socrates120x import atomic_write_text, locked_read_modify_write
 
 # ---------------------------------------------------------------------------
 # atomic_write_text
@@ -42,7 +42,7 @@ def test_atomic_write_text_does_not_clobber_on_rename_failure(
     target = tmp_path / "out.txt"
     target.write_text("ORIGINAL — do not lose me", encoding="utf-8")
 
-    import socrates120x._atomic as atomic_mod
+    import socrates120x as atomic_mod
 
     def boom(src: object, dst: object) -> None:
         raise OSError("simulated replace failure")
@@ -98,7 +98,7 @@ def test_locked_rmw_requires_existing_file(tmp_path: Path) -> None:
 def _concurrent_decide_worker(target_str: str, append: str, hold_ms: int) -> None:
     """Helper: read target, sleep (to expose the race window), append, write
     back — all under the lock. Two of these racing must NOT lose appends."""
-    from socrates120x._atomic import locked_read_modify_write as rmw
+    from socrates120x import locked_read_modify_write as rmw
     target = Path(target_str)
 
     def mutate(current: str) -> str:

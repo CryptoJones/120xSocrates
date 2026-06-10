@@ -6,9 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x.onboard import _top_bullets, synthesize_welcome, write_welcome
-from socrates120x.render import render_all
-from socrates120x.scaffold import scaffold
+from socrates120x import _top_bullets, render_all, scaffold, synthesize_welcome, write_welcome
 
 
 def _clean_answers() -> dict:
@@ -171,9 +169,7 @@ def test_synthesize_picks_highest_numbered_sprint_not_001(tmp_path) -> None:
     """A project that has progressed past 001 must not have its WELCOME.md
     still claim sprint 001 just because answers.json was the init record.
     """
-    from socrates120x.onboard import synthesize_welcome
-    from socrates120x.render import render_all
-    from socrates120x.scaffold import scaffold
+    from socrates120x import render_all, scaffold, synthesize_welcome
 
     p = tmp_path / "demo"
     scaffold(p)
@@ -203,9 +199,7 @@ def test_synthesize_picks_highest_numbered_sprint_not_001(tmp_path) -> None:
 def test_synthesize_ignores_non_canonical_sprint_dirs(tmp_path) -> None:
     """Stray dirs like `draft/`, `backup-002/`, `notes/` must NOT be picked
     as the active sprint — they don't match the canonical NNN- prefix."""
-    from socrates120x.onboard import synthesize_welcome
-    from socrates120x.render import render_all
-    from socrates120x.scaffold import scaffold
+    from socrates120x import render_all, scaffold, synthesize_welcome
 
     p = tmp_path / "demo"
     scaffold(p)
@@ -242,10 +236,7 @@ def test_synthesize_includes_post_init_decisions_from_decide(tmp_path) -> None:
     """`socrates decide` appends to DECISIONS.md after init. `socrates
     onboard` must surface those — otherwise WELCOME.md stays stale and
     new collaborators read decisions that were superseded weeks ago."""
-    from socrates120x.decide import record_decision
-    from socrates120x.onboard import synthesize_welcome
-    from socrates120x.render import render_all
-    from socrates120x.scaffold import scaffold
+    from socrates120x import record_decision, render_all, scaffold, synthesize_welcome
 
     p = tmp_path / "demo"
     scaffold(p)
@@ -274,10 +265,7 @@ def test_synthesize_includes_post_init_decisions_from_decide(tmp_path) -> None:
 def test_synthesize_orders_post_init_decisions_first(tmp_path) -> None:
     """Recency matters — the post-init decision should appear ABOVE the
     init-time decision in WELCOME.md so new readers see the latest first."""
-    from socrates120x.decide import record_decision
-    from socrates120x.onboard import synthesize_welcome
-    from socrates120x.render import render_all
-    from socrates120x.scaffold import scaffold
+    from socrates120x import record_decision, render_all, scaffold, synthesize_welcome
 
     p = tmp_path / "demo"
     scaffold(p)
