@@ -101,7 +101,7 @@ class OrphanPatternSourceCheck(Check):
         for pattern in sorted(patterns.glob("*.md")):
             if pattern.name == "README.md":
                 continue
-            body = pattern.read_text(errors="replace")
+            body = pattern.read_text(errors="replace", encoding="utf-8")
             m = self._SOURCE_LINE.search(body)
             if not m:
                 continue
@@ -137,7 +137,7 @@ class StaleProposalCheck(Check):
         if not proposals.is_file() or not builds.is_dir():
             return []
         build_names = {p.name for p in builds.iterdir() if p.is_dir()}
-        body = proposals.read_text(errors="replace")
+        body = proposals.read_text(errors="replace", encoding="utf-8")
         findings: list[Finding] = []
         seen: set[str] = set()
         for m in self._SLUG.finditer(body):
@@ -167,7 +167,7 @@ def _build_client_reference(build: Path) -> str | None:
     if answers.is_file():
         import json
         try:
-            data = json.loads(answers.read_text())
+            data = json.loads(answers.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 v = data.get("client")
                 if isinstance(v, str) and v.strip():
@@ -176,7 +176,7 @@ def _build_client_reference(build: Path) -> str | None:
             pass
     agents = build / "AGENTS.md"
     if agents.is_file():
-        text = agents.read_text(errors="replace")
+        text = agents.read_text(errors="replace", encoding="utf-8")
         m = re.search(r"Client:\s*\*\*([^*\n]+)\*\*", text)
         if m:
             return m.group(1).strip()

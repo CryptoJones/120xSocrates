@@ -54,7 +54,7 @@ def test_status_reports_state_freshness(company: Path) -> None:
     project = _populate_build(company / "builds", "alpha")
     state = project / "planning" / "STATE.md"
     old = (_dt.date.today() - _dt.timedelta(days=20)).isoformat()
-    state.write_text(f"# STATE\n\n_Last updated: {old}_\n")
+    state.write_text(f"# STATE\n\n_Last updated: {old}_\n", encoding="utf-8")
     rows = companyos_status(company)
     assert rows[0].state_age_days == 20
 
@@ -63,7 +63,7 @@ def test_status_reports_journal_freshness(company: Path) -> None:
     project = _populate_build(company / "builds", "alpha")
     journal_dir = project / "planning" / "journal"
     old = _dt.date.today() - _dt.timedelta(days=3)
-    (journal_dir / f"{old.isoformat()}.md").write_text("entry")
+    (journal_dir / f"{old.isoformat()}.md").write_text("entry", encoding="utf-8")
     rows = companyos_status(company)
     assert rows[0].journal_age_days == 3
 

@@ -63,7 +63,7 @@ def test_pack_specific_sprint(project: Path) -> None:
     sprint2 = project / "planning" / "sprints" / "002-rebate-engine"
     sprint2.mkdir()
     for fname in ("requirements.md", "blueprint.md", "acceptance.md", "handoff-prompt.md"):
-        (sprint2 / fname).write_text(f"# {fname} (sprint 2)")
+        (sprint2 / fname).write_text(f"# {fname} (sprint 2)", encoding="utf-8")
     text = build_pack(project, include_sprint="002-rebate-engine")
     assert "002-rebate-engine" in text
     # Sprint 1 files should NOT appear since we asked for sprint 2.
@@ -80,7 +80,7 @@ def test_write_pack_creates_file(project: Path) -> None:
     target = write_pack(project)
     assert target == project / ".socrates-architect-pack.md"
     assert target.is_file()
-    assert "AcmeCorp" in target.read_text()
+    assert "AcmeCorp" in target.read_text(encoding="utf-8")
 
 
 def test_pack_starts_with_architect_header(project: Path) -> None:
@@ -106,10 +106,10 @@ def test_pack_kit_path_embeds_kit_files(project: Path, tmp_path: Path) -> None:
     kit.mkdir()
     (kit / "120x-architect-builder-philosophy.md").write_text(
         "# Fake philosophy doc body content."
-    )
+    , encoding="utf-8")
     (kit / "120x-project-scaffold-instructions.md").write_text(
         "# Fake scaffold instructions content."
-    )
+    , encoding="utf-8")
     # Quickstart deliberately absent — pack should skip cleanly.
     text = build_pack(project, kit_path=kit)
     assert "120x-architect-builder-philosophy.md" in text
@@ -121,7 +121,7 @@ def test_pack_kit_path_embeds_kit_files(project: Path, tmp_path: Path) -> None:
 def test_pack_kit_path_via_env_var(project: Path, tmp_path: Path, monkeypatch) -> None:
     kit = tmp_path / "env-kit"
     kit.mkdir()
-    (kit / "120x-quickstart.md").write_text("# Quickstart from env\n")
+    (kit / "120x-quickstart.md").write_text("# Quickstart from env\n", encoding="utf-8")
     monkeypatch.setenv("SOCRATES_KIT_PATH", str(kit))
     text = build_pack(project)
     assert "Quickstart from env" in text
@@ -137,7 +137,7 @@ def test_pack_kit_path_missing_dir_skipped(project: Path) -> None:
 def test_pack_philosophy_and_kit_can_combine(project: Path, tmp_path: Path) -> None:
     kit = tmp_path / "kit"
     kit.mkdir()
-    (kit / "120x-architect-builder-philosophy.md").write_text("# Kit philosophy.\n")
+    (kit / "120x-architect-builder-philosophy.md").write_text("# Kit philosophy.\n", encoding="utf-8")
     text = build_pack(project, include_philosophy=True, kit_path=kit)
     assert "120x Architect / Builder stance" in text  # socrates preamble
     assert "Kit philosophy" in text  # kit file
@@ -198,7 +198,7 @@ def test_pack_xml_format_escapes_xml_specials(tmp_path: Path) -> None:
     scaffold(p)
     (p / "planning" / "DECISIONS.md").write_text(
         "# Decisions\n\n- chose <X> over Y & Z for the foo>bar case\n"
-    )
+    , encoding="utf-8")
     text = build_pack(p, format="xml")
     # The body is inside an XML element — `<`, `>`, `&` must be escaped.
     assert "&lt;X&gt;" in text
@@ -246,8 +246,8 @@ def test_pack_html_passes_script_tags_through_but_csp_blocks_them(
     # Plant a script tag in DECISIONS.md (one of the files pack reads).
     decisions = project / "planning" / "DECISIONS.md"
     decisions.write_text(
-        decisions.read_text() + "\n\n<script>alert('xss')</script>\n"
-    )
+        decisions.read_text(encoding="utf-8") + "\n\n<script>alert('xss')</script>\n"
+    , encoding="utf-8")
 
     text = build_pack(project, format="html")
     # Verify the script tag really did pass through (proving CSP is the

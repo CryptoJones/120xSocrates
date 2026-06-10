@@ -44,12 +44,12 @@ def test_render_writes_every_file(tmp_path: Path) -> None:
     written = render_all(target, _sample_answers())
 
     # Spot-check a handful that exercise the various renderers.
-    assert (target / "AGENTS.md").read_text().startswith("# AGENTS.md")
+    assert (target / "AGENTS.md").read_text(encoding="utf-8").startswith("# AGENTS.md")
     assert (target / "CLAUDE.md").is_file()
     assert (target / "CODEX.md").is_file()
-    assert (target / "README.md").read_text().startswith("# quarterly-rebates")
-    assert "Acme Wholesale" in (target / "AGENTS.md").read_text()
-    assert "Acme Wholesale" in (target / "README.md").read_text()
+    assert (target / "README.md").read_text(encoding="utf-8").startswith("# quarterly-rebates")
+    assert "Acme Wholesale" in (target / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Acme Wholesale" in (target / "README.md").read_text(encoding="utf-8")
     assert len(written) >= 15
 
 
@@ -58,7 +58,7 @@ def test_render_propagates_client_terminology(tmp_path: Path) -> None:
     scaffold(target)
     render_all(target, _sample_answers())
 
-    domain = (target / "planning/DOMAIN.md").read_text()
+    domain = (target / "planning/DOMAIN.md").read_text(encoding="utf-8")
     assert "rebate cycle" in domain
     assert "tier A vendor" in domain
     assert "Operations manager" in domain
@@ -92,7 +92,7 @@ def test_render_handles_empty_optional_lists(tmp_path: Path) -> None:
     # Should not raise.
     render_all(target, answers)
     # Empty inputs render the placeholder strings, not 'None' or Python repr.
-    domain = (target / "planning/DOMAIN.md").read_text()
+    domain = (target / "planning/DOMAIN.md").read_text(encoding="utf-8")
     assert "None" not in domain
     assert "[]" not in domain
 
@@ -103,7 +103,7 @@ def test_decisions_md_stamps_each_decision_with_today(tmp_path: Path) -> None:
     target = tmp_path / "demo"
     scaffold(target)
     render_all(target, _sample_answers())
-    body = (target / "planning" / "DECISIONS.md").read_text()
+    body = (target / "planning" / "DECISIONS.md").read_text(encoding="utf-8")
     today = _dt.date.today().isoformat()
     # Both seeded decisions should carry today's stamp.
     assert f"Supabase over self-hosted Postgres — client already has an account ({today})" in body
@@ -115,6 +115,6 @@ def test_sprint1_handoff_includes_sprint_folder_placeholder(tmp_path: Path) -> N
     scaffold(target)
     render_all(target, _sample_answers())
 
-    handoff = (target / "planning/sprints/001-discovery-architecture/handoff-prompt.md").read_text()
+    handoff = (target / "planning/sprints/001-discovery-architecture/handoff-prompt.md").read_text(encoding="utf-8")
     assert "[SPRINT_FOLDER]" in handoff
     assert "AGENTS.md" in handoff

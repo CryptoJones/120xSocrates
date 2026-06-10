@@ -36,7 +36,7 @@ def test_preflight_runs_all_four_checks(project: Path) -> None:
 
 def test_preflight_journal_passes_when_today_entry_exists(project: Path) -> None:
     today = _dt.date.today().isoformat()
-    (project / "planning" / "journal" / f"{today}.md").write_text("entry")
+    (project / "planning" / "journal" / f"{today}.md").write_text("entry", encoding="utf-8")
     findings = preflight(project)
     journal = next(f for f in findings if f.name == "journal")
     assert journal.result is CheckResult.PASS
@@ -58,7 +58,7 @@ def test_preflight_extract_passes_when_pattern_present(project: Path) -> None:
     (project / "patterns").mkdir(exist_ok=True)
     (project / "patterns" / "CANDIDATE-x.md").write_text(
         f"**Source project** | `{project.name}`\n"
-    )
+    , encoding="utf-8")
     findings = preflight(project)
     extract = next(f for f in findings if f.name == "extract")
     assert extract.result is CheckResult.PASS
@@ -68,7 +68,7 @@ def test_preflight_state_warns_on_old_date(project: Path) -> None:
     old = (_dt.date.today() - _dt.timedelta(days=30)).isoformat()
     (project / "planning" / "STATE.md").write_text(
         f"# STATE\n\n_Last updated: {old}_\n"
-    )
+    , encoding="utf-8")
     findings = preflight(project)
     state = next(f for f in findings if f.name == "state")
     assert state.result is CheckResult.WARN

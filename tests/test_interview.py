@@ -65,7 +65,7 @@ def test_interview_saves_incrementally(tmp_path: Path) -> None:
 
     # Answer file exists and is non-empty after the run.
     assert answers_path.exists()
-    text = answers_path.read_text()
+    text = answers_path.read_text(encoding="utf-8")
     assert "demo" in text
     assert text.startswith("{")
 
@@ -95,7 +95,7 @@ def test_editor_mode_uses_subprocess(tmp_path: Path) -> None:
             "# this line is a comment and should be stripped\n"
             "real answer line one\n"
             "real answer line two\n"
-        )
+        , encoding="utf-8")
         return subprocess.CompletedProcess(args=cmd, returncode=0)
 
     answers_path = tmp_path / ".socrates-answers.json"
@@ -143,7 +143,7 @@ def test_save_does_not_leave_partial_file_on_failure(
     state. (The tempfile may exist but the target should be untouched.)"""
     answers_path = tmp_path / "answers.json"
     # Seed with a known good file.
-    answers_path.write_text('{"old": "value"}\n')
+    answers_path.write_text('{"old": "value"}\n', encoding="utf-8")
 
     iv = Interview(answers_path=answers_path, project_name="p")
     iv.answers = {"new": "value"}
@@ -160,7 +160,7 @@ def test_save_does_not_leave_partial_file_on_failure(
         iv.save()  # expected to fail at the rename; verify state AFTER
 
     # The pre-existing file must NOT have been clobbered by the failed save.
-    assert answers_path.read_text() == '{"old": "value"}\n'
+    assert answers_path.read_text(encoding="utf-8") == '{"old": "value"}\n'
     # And no tempfile should be left behind to confuse the next run.
     assert not (tmp_path / "answers.json.tmp").exists()
     # Restore (paranoia).
@@ -175,7 +175,7 @@ def test_resume_with_corrupt_answers_file_warns_and_starts_fresh(
     instead of crashing with JSONDecodeError."""
     answers_path = tmp_path / "answers.json"
     # Simulate a half-written file (the kind a SIGINT mid-write would leave).
-    answers_path.write_text('{"k": "v"')  # missing closing brace
+    answers_path.write_text('{"k": "v"', encoding="utf-8")  # missing closing brace
 
     iv = Interview(
         answers_path=answers_path,
@@ -196,7 +196,7 @@ def test_resume_with_unreadable_answers_file_warns_and_starts_fresh(
     """An OSError on read (e.g., permission denied) should also warn rather
     than crash."""
     answers_path = tmp_path / "answers.json"
-    answers_path.write_text('{"k": "v"}')
+    answers_path.write_text('{"k": "v"}', encoding="utf-8")
 
     # Monkeypatch read_text to raise OSError to simulate permission denied.
     real_read = Path.read_text

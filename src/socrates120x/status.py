@@ -134,7 +134,7 @@ def _extract_tagline(project: Path) -> str:
     answers_path = project / ".socrates-answers.json"
     if answers_path.is_file():
         try:
-            data = json.loads(answers_path.read_text())
+            data = json.loads(answers_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 t = data.get("tagline")
                 if isinstance(t, str):
@@ -143,7 +143,7 @@ def _extract_tagline(project: Path) -> str:
             pass
     agents = project / "AGENTS.md"
     if agents.is_file():
-        m = re.search(r"\*\*[^*]+\*\*\s+—\s+(.+)", agents.read_text(errors="replace"))
+        m = re.search(r"\*\*[^*]+\*\*\s+—\s+(.+)", agents.read_text(errors="replace", encoding="utf-8"))
         if m:
             return m.group(1).strip()
     return ""
@@ -171,7 +171,7 @@ def _state_age_days(project: Path) -> int | None:
     state = project / "planning" / "STATE.md"
     if not state.is_file():
         return None
-    m = _DATE.search(state.read_text(errors="replace"))
+    m = _DATE.search(state.read_text(errors="replace", encoding="utf-8"))
     if not m:
         return None
     try:

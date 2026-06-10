@@ -118,7 +118,7 @@ def test_scaffold_shape_check_honours_skip_list(clean_project: Path) -> None:
     (clean_project / "docs" / "PERMISSIONS.md").unlink()
     (clean_project / ".socrates-audit.json").write_text(
         json.dumps({"scaffold_shape": {"ignore": ["docs/API.md"]}})
-    )
+    , encoding="utf-8")
     findings = ScaffoldShapeCheck().run(clean_project)
     messages = [f.message for f in findings]
     # API.md was ignored; PERMISSIONS.md still fires.
@@ -146,7 +146,7 @@ def test_sprint_folder_check_flags_missing_files(clean_project: Path) -> None:
 
 
 def test_adapter_check_fires_when_pointer_missing(clean_project: Path) -> None:
-    (clean_project / "CLAUDE.md").write_text("# This file does not mention the router.")
+    (clean_project / "CLAUDE.md").write_text("# This file does not mention the router.", encoding="utf-8")
     findings = AdapterPointsToAgentsCheck().run(clean_project)
     assert any("CLAUDE.md" in f.message for f in findings)
 
@@ -158,7 +158,7 @@ def test_weasel_words_check_fires(clean_project: Path) -> None:
         "- The system is robust enough for production.\n"
         "- Tests pass as needed.\n"
         "- DOMAIN.md reflects client terminology.\n"  # this line is clean
-    )
+    , encoding="utf-8")
     findings = WeaselWordsCheck().run(clean_project)
     assert len(findings) == 2
     assert {f.line for f in findings} == {3, 4}
@@ -167,7 +167,7 @@ def test_weasel_words_check_fires(clean_project: Path) -> None:
 def test_state_freshness_check_fires_on_old_date(clean_project: Path) -> None:
     state = clean_project / "planning" / "STATE.md"
     old = (_dt.date.today() - _dt.timedelta(days=120)).isoformat()
-    state.write_text(f"# STATE\n\n_Last updated: {old}_\n")
+    state.write_text(f"# STATE\n\n_Last updated: {old}_\n", encoding="utf-8")
     findings = StateFreshnessCheck().run(clean_project)
     assert len(findings) == 1
     assert "120 days ago" in findings[0].message
@@ -181,7 +181,7 @@ def test_state_freshness_check_quiet_when_fresh(clean_project: Path) -> None:
 
 def test_always_on_risks_check_fires_when_missing(clean_project: Path) -> None:
     risks = clean_project / "planning" / "RISKS.md"
-    risks.write_text("# RISKS\n\n- Some project-specific risk only.\n")
+    risks.write_text("# RISKS\n\n- Some project-specific risk only.\n", encoding="utf-8")
     findings = AlwaysOnRisksCheck().run(clean_project)
     assert len(findings) == 1
     assert "source of truth" in findings[0].message.lower()

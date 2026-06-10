@@ -52,7 +52,7 @@ def test_pack_format_xml_writes_xml(project: Path) -> None:
     assert rc == 0
     target = project / ".socrates-architect-pack.xml"
     assert target.is_file()
-    content = target.read_text()
+    content = target.read_text(encoding="utf-8")
     assert content.startswith("<bundle ")
     assert "AcmeCorp" in content
 
@@ -62,7 +62,7 @@ def test_pack_format_html_writes_html(project: Path) -> None:
     assert rc == 0
     target = project / ".socrates-architect-pack.html"
     assert target.is_file()
-    content = target.read_text()
+    content = target.read_text(encoding="utf-8")
     assert content.startswith("<!doctype html>")
 
 
