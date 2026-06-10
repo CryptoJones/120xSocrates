@@ -1,6 +1,6 @@
 [project]
 name = "socrates120x"
-version = "0.8.0"
+version = "1.0.0"
 description = "Interactive CLI that interrogates you Socratic-style and fills out the planning docs for a 120x Operators Kit project."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -8,7 +8,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Aaron K. Clark", email = "akclark@thenetwerk.net" }]
 keywords = ["120x", "scaffold", "planning", "cli", "interview", "socratic", "operators-kit"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",

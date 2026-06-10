@@ -37,6 +37,15 @@ Tech stack: **Python 3.10+, stdlib only (zero runtime dependencies)**.
 - **Run everything CI runs before committing**: `pytest`, `ruff check .`, `mypy src` (strict).
 - All file I/O is explicit UTF-8; files that operators depend on (answers, DECISIONS.md, caches) are written atomically.
 
+## Release process
+
+The version in `pyproject.toml` is the single source of truth (the README
+badge reads it directly; `--version` reads it via package metadata). To release:
+
+1. Bump `version` in `pyproject.toml`.
+2. Add the version section to `CHANGELOG.md`.
+3. Merge to `main`, then tag: `git tag vX.Y.Z && git push --tags` (both remotes).
+
 ## Mirrors
 
 Pushed to both [GitHub](https://github.com/CryptoJones/120xSocrates) and [Codeberg](https://codeberg.org/CryptoJones/120xSocrates). Codeberg is the source of truth on divergence.
