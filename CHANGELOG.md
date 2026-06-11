@@ -63,3 +63,5 @@ v0.8.0 — projects scaffolded by earlier versions are fully compatible.
 
 ## Pre-history — 2026-05-18
 - Initial scaffold: the interview CLI, `--editor` mode, running-list confirmation, inline defaults.
+
+Proudly Made in Nebraska. Go Big Red! 🌽 https://xkcd.com/2347/
