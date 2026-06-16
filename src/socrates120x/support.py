@@ -239,7 +239,17 @@ def _ask_line(input_fn: InputFn, output_fn: OutputFn, q: Question) -> str:
         try:
             raw = input_fn(f"   ›{suffix} ").strip()
         except EOFError:
-            raw = ""
+            # stdin is exhausted (Ctrl-D, or a redirected/closed stream).
+            # The old code set raw="" and looped, which spun a CPU core
+            # forever on a required field with no default — e.g. the very
+            # first init question (`client`). Resolve now instead: use the
+            # default if any, otherwise abort the interview by re-raising
+            # (cli/extract catch EOFError, save progress, suggest --resume).
+            if q.default:
+                return q.default
+            if q.required:
+                raise
+            return ""
         if not raw and q.default:
             return q.default
         if not raw and q.required:
@@ -251,11 +261,13 @@ def _ask_line(input_fn: InputFn, output_fn: OutputFn, q: Question) -> str:
 def _ask_multiline(input_fn: InputFn, output_fn: OutputFn, q: Question) -> str:
     output_fn("   (multi-line — finish with a single '.' on its own line)")
     lines: list[str] = []
+    eof = False
     while True:
         prompt = "   …  " if lines else "   ›  "
         try:
             line = input_fn(prompt)
         except EOFError:
+            eof = True
             break
         if line.strip() == ".":
             break
@@ -265,13 +277,17 @@ def _ask_multiline(input_fn: InputFn, output_fn: OutputFn, q: Question) -> str:
         output_fn("   (using default)")
         return q.default
     if not text and q.required:
+        if eof:
+            # Dead stream — recursing here used to climb to RecursionError.
+            # Abort cleanly; the caller saves progress and suggests --resume.
+            raise EOFError
         output_fn("   (this one is required — try again)")
         return _ask_multiline(input_fn, output_fn, q)
     return text
 
 
 def _ask_multiline_editor(
-    output_fn: OutputFn, q: Question, *, input_fn: InputFn = input
+    output_fn: OutputFn, q: Question, *, input_fn: InputFn = input, _attempt: int = 0
 ) -> str:
     """Open $EDITOR for a multiline answer; fall back to inline prompt if
     no editor is configured.
@@ -322,8 +338,13 @@ def _ask_multiline_editor(
         output_fn("   (empty — using default)")
         return q.default
     if not body and q.required:
+        if _attempt >= 2:
+            output_fn("   (still empty after several tries — leaving this blank)")
+            return ""
         output_fn("   (this one is required — re-opening editor)")
-        return _ask_multiline_editor(output_fn, q, input_fn=input_fn)
+        return _ask_multiline_editor(
+            output_fn, q, input_fn=input_fn, _attempt=_attempt + 1
+        )
     return body
 
 

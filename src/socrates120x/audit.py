@@ -110,6 +110,19 @@ WEASEL_WORDS = (
     "where applicable",
 )
 
+# Precompiled whole-phrase matchers. Naive substring search false-positived:
+# "TBD" matched "STBD pin", "as needed" matched "has needed" / "overseas
+# needed", "etc." matched "etcetera". Under --strict a spurious WARNING flips
+# the exit code and breaks CI — exactly the false-positive class the audit
+# promises to avoid. The (?<!\w)/(?!\w) lookarounds require a non-word
+# boundary without consuming an adjacent word char, so phrases ending in
+# punctuation ("etc.") still match before a space or end-of-line. (The
+# terminology check got word boundaries in v1.0.0; the weasel check did not.)
+_WEASEL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+    (w, re.compile(rf"(?<!\w){re.escape(w)}(?!\w)", re.IGNORECASE))
+    for w in WEASEL_WORDS
+)
+
 ALWAYS_ON_RISK_PHRASES = (
     "AI output is not source of truth",
     "ai output must not become the source of truth",
@@ -244,9 +257,8 @@ def check_acceptance_weasels(project: Path) -> list[Finding]:
         if not acc.is_file():
             continue
         for line_no, line in enumerate(acc.read_text(errors="replace", encoding="utf-8").splitlines(), 1):
-            lower = line.lower()
-            for weasel in WEASEL_WORDS:
-                if weasel.lower() in lower:
+            for weasel, pattern in _WEASEL_PATTERNS:
+                if pattern.search(line):
                     findings.append(Finding(
                         "acceptance-weasels", Severity.WARNING,
                         f"weasel phrase '{weasel}' in acceptance criterion — "

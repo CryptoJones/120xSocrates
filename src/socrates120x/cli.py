@@ -434,7 +434,10 @@ def _cmd_init(args: argparse.Namespace) -> int:
     )
     try:
         interview.run()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
+        # KeyboardInterrupt = Ctrl-C; EOFError = Ctrl-D / closed stdin on a
+        # required question. Progress is saved after every answer, so point
+        # the operator at --resume rather than spinning or dumping a traceback.
         print(
             "\n\nInterview interrupted. Answers so far are saved. "
             "Re-run with --resume to pick up where you left off.",

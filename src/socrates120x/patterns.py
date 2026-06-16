@@ -141,7 +141,9 @@ def run_extract(
     )
     try:
         iv.run()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
+        # Ctrl-C or Ctrl-D / exhausted stdin on a required question. Progress
+        # is saved after every answer, so resume rather than crash.
         print(
             "\n\nExtraction interrupted. Answers saved. "
             "Re-run with --resume to pick up where you left off.",

@@ -4,6 +4,16 @@ All notable changes to 120xSocrates. Format follows [Keep a Changelog](https://k
 versions follow [SemVer](https://semver.org/). The version in `pyproject.toml` is the single
 source of truth — the README badge reads it directly, and each release is tagged `vX.Y.Z`.
 
+## [1.0.1] — 2026-06-16
+
+Two correctness fixes the v1.0.0 review wave missed: both are in the same
+modules touched then, but no prior branch covered either. Generated kit output
+is unchanged.
+
+### Fixed
+- `prompting`: an exhausted/closed stdin (Ctrl-D, redirected input) on a required question with no default now aborts the interview cleanly via `EOFError` (caught by `init`/`extract`, progress saved, `--resume` suggested) instead of spinning a CPU core forever in `_ask_line` or recursing to `RecursionError` in `_ask_multiline`. The v1.0.0 `$EDITOR`/`shlex` fix touched the editor path only, not this. The editor re-prompt loop is also capped.
+- `audit`: the `acceptance-weasels` check matches whole phrases (word boundaries) instead of substrings, ending false positives like `TBD` inside `STBD` or `as needed` inside `has needed` / `overseas needed`. A spurious WARNING flips the exit code under `--strict` and breaks CI — the v1.0.0 word-boundary fix covered the terminology check but not this one.
+
 ## [1.0.0] — 2026-06-10
 
 The v1 release: the bugfix/reliability review wave merged, the codebase
