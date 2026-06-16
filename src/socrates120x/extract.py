@@ -129,7 +129,9 @@ def run_extract(
     )
     try:
         iv.run()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
+        # Ctrl-C or Ctrl-D / exhausted stdin on a required question. Progress
+        # is saved after every answer, so resume rather than crash.
         print(
             "\n\nExtraction interrupted. Answers saved. "
             "Re-run with --resume to pick up where you left off.",
@@ -138,7 +140,7 @@ def run_extract(
 
     slug = _sanitize_slug(iv.answers.get("pattern_slug", "untitled"))
     target = target_dir / f"CANDIDATE-{slug}.md"
-    target.write_text(render_pattern(iv.answers, project=project))
+    target.write_text(render_pattern(iv.answers, project=project), encoding="utf-8")
     print(f"\nPattern candidate written to: {target}")
     print()
     print("Next steps:")

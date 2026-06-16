@@ -16,7 +16,7 @@ operator forgets become the four things `ship` forces.
 from __future__ import annotations
 
 import datetime as _dt
-import json
+import re
 import sys
 from dataclasses import dataclass
 from enum import Enum
@@ -137,7 +137,7 @@ def _extract_check(project: Path) -> ShipFinding:
         if not loc.is_dir():
             continue
         for f in loc.glob("CANDIDATE-*.md"):
-            text = f.read_text(errors="replace")
+            text = f.read_text(errors="replace", encoding="utf-8")
             if f"`{project.name}`" in text:
                 found = True
                 break
@@ -177,19 +177,15 @@ def _state_check(project: Path) -> ShipFinding:
             result=CheckResult.FAIL,
             message="planning/STATE.md missing",
         )
-    answers_path = project / ".socrates-answers.json"
-    if answers_path.is_file():
-        try:
-            data = json.loads(answers_path.read_text())
-        except (OSError, ValueError):
-            data = None
-        if isinstance(data, dict) and data.get("state_next"):
-            # If state_next references the NEXT sprint, we can be confident
-            # STATE is current-sprint-aware.
-            pass
-    # Fall back to recency check via the embedded date.
-    import re
-    m = re.search(r"Last updated:\s*(\d{4}-\d{2}-\d{2})", state.read_text(errors="replace"))
+    # Recency check via the embedded 'Last updated' date. (A previous version
+    # read .socrates-answers.json here intending to skip the recency check
+    # when state_next looked forward-looking, but that branch was a no-op
+    # `pass` — dead code that misled readers. Removed; the date check below is
+    # the actual logic.)
+    m = re.search(
+        r"Last updated:\s*(\d{4}-\d{2}-\d{2})",
+        state.read_text(errors="replace", encoding="utf-8"),
+    )
     if not m:
         return ShipFinding(
             name="state",

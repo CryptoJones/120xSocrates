@@ -362,7 +362,49 @@ def main(argv: list[str] | None = None) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _validate_slug(slug: str, *, kind: str = "project") -> str | None:
+    """Return an error message if *slug* would escape its parent directory or
+    is otherwise unsafe as a single path component; ``None`` if OK.
+
+    Reject:
+      - empty / whitespace-only slugs (would resolve to the base dir)
+      - slugs containing a path separator (``/`` or ``\\``) — would nest or
+        traverse outside the intended parent
+      - slugs equal to ``.`` / ``..`` or containing a ``..`` segment
+      - absolute paths (``Path("/x") / "/etc"`` returns ``/etc`` — the slug
+        silently wins and scaffolds outside --base)
+      - slugs containing NUL bytes (defensive against API misuse)
+
+    Allowed: alphanumeric, dash, underscore, dot (for slugs like ``v0.8.0``
+    or ``.hidden`` if the operator really wants those).
+    """
+    if not slug or not slug.strip():
+        return f"{kind} slug cannot be empty."
+    if "\x00" in slug:
+        return f"{kind} slug cannot contain NUL bytes."
+    if "/" in slug or "\\" in slug:
+        return (
+            f"{kind} slug must be a single path component "
+            f"(no '/' or '\\\\'); got {slug!r}."
+        )
+    if Path(slug).is_absolute():
+        return (
+            f"{kind} slug must be relative, not absolute; got {slug!r}. "
+            f"Use --base to choose a different parent directory."
+        )
+    if slug in {".", ".."} or any(p == ".." for p in Path(slug).parts):
+        return (
+            f"{kind} slug cannot contain '..' segments; got {slug!r}. "
+            f"Use --base to choose a different parent directory."
+        )
+    return None
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
+    slug_err = _validate_slug(args.project, kind="project")
+    if slug_err:
+        print(f"error: {slug_err}", file=sys.stderr)
+        return 2
     target: Path = args.base.expanduser().resolve() / args.project
 
     if not args.no_scaffold:
@@ -402,7 +444,11 @@ def _cmd_init(args: argparse.Namespace) -> int:
     )
     try:
         interview.run()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
+        # KeyboardInterrupt = Ctrl-C; EOFError = Ctrl-D / closed stdin on a
+        # required question. Either way: progress is already saved (save()
+        # runs after every answer), so point the operator at --resume rather
+        # than spinning or dumping a traceback.
         print(
             "\n\nInterview interrupted. Answers so far are saved. "
             "Re-run with --resume to pick up where you left off.",
@@ -585,7 +631,10 @@ def _cmd_companyos(args: argparse.Namespace) -> int:
     target: Path = args.path.expanduser().resolve()
     try:
         written = scaffold_companyos(target)
-    except FileExistsError as e:
+    except (FileExistsError, NotADirectoryError) as e:
+        # scaffold_companyos raises NotADirectoryError when the target exists
+        # as a regular file. Catch it here so the CLI surfaces a clean error
+        # instead of a Python stacktrace.
         print(f"error: {e}", file=sys.stderr)
         return 2
     print(f"Scaffolded CompanyOS at: {target}")

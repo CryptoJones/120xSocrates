@@ -64,29 +64,34 @@ def format_status(rows: list[ProjectStatus], *, use_color: bool | None = None) -
     lines.append("─" * (name_w + sprint_w + 8 + 10 + 10 + 10 + 12))
 
     for r in rows:
-        audit_chunk = _color(
-            f"E{r.audit_errors}W{r.audit_warnings}",
+        # Pad the PLAIN text to the column width, THEN colorize. Padding a
+        # string that already contains ANSI escapes counts the escape bytes
+        # toward the width, so every colored column over-padded and the table
+        # skewed on a real (color) terminal — the bug was invisible because
+        # tests only run with use_color=False.
+        audit_cell = _color(
+            f"{f'E{r.audit_errors}W{r.audit_warnings}':<8}",
             "red" if r.audit_errors else "yellow" if r.audit_warnings else "green",
             use_color,
         )
-        state_chunk = _color(
-            _age_label(r.state_age_days),
+        state_cell = _color(
+            f"{_age_label(r.state_age_days):<10}",
             _age_color(r.state_age_days, STALE_STATE_DAYS),
             use_color,
         )
-        journal_chunk = _color(
-            _age_label(r.journal_age_days),
+        journal_cell = _color(
+            f"{_age_label(r.journal_age_days):<10}",
             _age_color(r.journal_age_days, STALE_JOURNAL_DAYS),
             use_color,
         )
-        extract_chunk = _color(
+        extract_cell = _color(
             "✓" if r.has_extract else "—",
             "green" if r.has_extract else "yellow",
             use_color,
         )
         lines.append(
             f"{r.name:<{name_w}}  {r.active_sprint:<{sprint_w}}  "
-            f"{audit_chunk:<8}  {state_chunk:<10}  {journal_chunk:<10}  {extract_chunk}"
+            f"{audit_cell}  {state_cell}  {journal_cell}  {extract_cell}"
         )
         if r.tagline:
             lines.append(f"{'':<{name_w}}    {_dim(r.tagline, use_color)}")
@@ -134,7 +139,7 @@ def _extract_tagline(project: Path) -> str:
     answers_path = project / ".socrates-answers.json"
     if answers_path.is_file():
         try:
-            data = json.loads(answers_path.read_text())
+            data = json.loads(answers_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 t = data.get("tagline")
                 if isinstance(t, str):
@@ -143,7 +148,7 @@ def _extract_tagline(project: Path) -> str:
             pass
     agents = project / "AGENTS.md"
     if agents.is_file():
-        m = re.search(r"\*\*[^*]+\*\*\s+—\s+(.+)", agents.read_text(errors="replace"))
+        m = re.search(r"\*\*[^*]+\*\*\s+—\s+(.+)", agents.read_text(errors="replace", encoding="utf-8"))
         if m:
             return m.group(1).strip()
     return ""
@@ -153,12 +158,19 @@ def _extract_active_sprint(project: Path) -> str:
     sprints = project / "planning" / "sprints"
     if not sprints.is_dir():
         return "—"
-    candidates = sorted(p.name for p in sprints.iterdir() if p.is_dir())
-    if not candidates:
+    # Highest-numbered canonical NNN- sprint dir. Sort by parsed number so
+    # 010- beats 9- (lexical sort mis-ordered once a project passed 009) and
+    # so this resolver agrees with onboard/pack/timeline on the active sprint.
+    canonical = re.compile(r"^(\d{3})-")
+    numbered = [
+        (int(m.group(1)), p.name)
+        for p in sprints.iterdir()
+        if p.is_dir() and (m := canonical.match(p.name))
+    ]
+    if not numbered:
         return "—"
-    # Heuristic: highest-numbered sprint folder. Strip the slug — show NNN-name
-    # but truncate aggressively for table layout.
-    name = candidates[-1]
+    numbered.sort(key=lambda pair: pair[0])
+    name = numbered[-1][1]
     if len(name) > 18:
         name = name[:17] + "…"
     return name
@@ -171,7 +183,7 @@ def _state_age_days(project: Path) -> int | None:
     state = project / "planning" / "STATE.md"
     if not state.is_file():
         return None
-    m = _DATE.search(state.read_text(errors="replace"))
+    m = _DATE.search(state.read_text(errors="replace", encoding="utf-8"))
     if not m:
         return None
     try:
@@ -197,7 +209,18 @@ def _latest_journal_age_days(project: Path) -> int | None:
 
 
 def _has_extract(project: Path) -> bool:
-    """A project has been "extracted" if any pattern candidate references it."""
+    """A project has been "extracted" if any pattern candidate references it.
+
+    Two prior bugs fixed here:
+    - Each pattern file was read TWICE (once per substring check). On a
+      CompanyOS with N projects and M patterns, status() became O(N*M) file
+      reads. Read once, check both markers against the same text.
+    - The fallback ``f"`{project.name}`" in text`` matched any backtick
+      mention of the project — a war story in pattern P saying
+      ``see `other-project` for context`` would falsely credit other-project
+      with an extract. Drop the loose fallback; only the explicit
+      ``Source project | `name``` line is authoritative.
+    """
     # 1) Local patterns/ dir with CANDIDATE-*.md.
     local = project / "patterns"
     if local.is_dir() and any(local.glob("CANDIDATE-*.md")):
@@ -207,10 +230,16 @@ def _has_extract(project: Path) -> bool:
     if parent.name == "builds":
         sibling = parent.parent / "patterns"
         if sibling.is_dir():
+            # Tolerate both emitter formats (the table cell may or may not
+            # wrap the label in ** depending on render version).
+            source_marker = f"Source project** | `{project.name}`"
+            source_marker_alt = f"Source project | `{project.name}`"
             for f in sibling.glob("CANDIDATE-*.md"):
-                if f"Source project | `{project.name}`" in f.read_text(errors="replace"):
-                    return True
-                if f"`{project.name}`" in f.read_text(errors="replace"):
+                try:
+                    text = f.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                if source_marker in text or source_marker_alt in text:
                     return True
     # 3) Or has an in-progress extract answers file.
     return (project / ".socrates-extract-answers.json").is_file()

@@ -35,7 +35,7 @@ def _load_answers_json(project: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             return data
     except (OSError, ValueError):
@@ -54,17 +54,26 @@ def _synthesize_from_answers(project: Path, answers: dict[str, Any]) -> str:
     next_action = answers.get("state_next") or "_(no next action)_"
 
     decisions_list = answers.get("decisions") or []
+    # `answers.decisions` is frozen at init time — it does NOT include
+    # post-init decisions appended by `socrates decide`. Read those from
+    # DECISIONS.md's "Decisions added after init" section and prepend so the
+    # freshest decisions appear first in WELCOME.md.
+    post_init = _post_init_decisions(project)
+    combined_decisions = [*post_init, *[str(d) for d in decisions_list]]
+
     out_of_scope = answers.get("out_of_scope") or []
     risks_list = answers.get("risks") or []
     open_questions = answers.get("open_questions") or []
 
-    top_decisions = [str(d) for d in decisions_list[:MAX_BULLETS]]
+    top_decisions = combined_decisions[:MAX_BULLETS]
     top_out_of_scope = [str(o) for o in out_of_scope[:MAX_BULLETS]]
     top_risks = [str(r) for r in risks_list[:MAX_BULLETS]]
     top_questions = [str(q) for q in open_questions[:MAX_BULLETS]]
 
-    current_sprint = "**001 — Discovery & Architecture**"  # init-rendered projects start here
+    # Pick the highest-numbered sprint directory rather than hardcoding "001":
+    # a project on sprint 005 should not still announce "001 — Discovery".
     active_sprint_path = _active_sprint_path(project)
+    current_sprint = _format_sprint_label(active_sprint_path)
     return _format_welcome(
         name=name, today=today, tagline=tagline, client=client, tech=tech,
         current_sprint=current_sprint, status=status, next_action=next_action,
@@ -79,22 +88,34 @@ def _synthesize_from_markdown(project: Path) -> str:
     today = _dt.date.today().isoformat()
     name = project.name
 
-    readme = (project / "README.md").read_text(errors="replace") if (project / "README.md").is_file() else ""
-    agents = (project / "AGENTS.md").read_text(errors="replace") if (project / "AGENTS.md").is_file() else ""
-    state = (project / "planning" / "STATE.md").read_text(errors="replace") if (project / "planning" / "STATE.md").is_file() else ""
-    decisions = (project / "planning" / "DECISIONS.md").read_text(errors="replace") if (project / "planning" / "DECISIONS.md").is_file() else ""
-    risks = (project / "planning" / "RISKS.md").read_text(errors="replace") if (project / "planning" / "RISKS.md").is_file() else ""
-    questions = (project / "planning" / "QUESTIONS.md").read_text(errors="replace") if (project / "planning" / "QUESTIONS.md").is_file() else ""
+    readme = (project / "README.md").read_text(errors="replace", encoding="utf-8") if (project / "README.md").is_file() else ""
+    agents = (project / "AGENTS.md").read_text(errors="replace", encoding="utf-8") if (project / "AGENTS.md").is_file() else ""
+    state = (project / "planning" / "STATE.md").read_text(errors="replace", encoding="utf-8") if (project / "planning" / "STATE.md").is_file() else ""
+    decisions = (project / "planning" / "DECISIONS.md").read_text(errors="replace", encoding="utf-8") if (project / "planning" / "DECISIONS.md").is_file() else ""
+    risks = (project / "planning" / "RISKS.md").read_text(errors="replace", encoding="utf-8") if (project / "planning" / "RISKS.md").is_file() else ""
+    questions = (project / "planning" / "QUESTIONS.md").read_text(errors="replace", encoding="utf-8") if (project / "planning" / "QUESTIONS.md").is_file() else ""
 
     tagline = _extract_tagline(readme, agents)
     client = _extract_field(agents, "Client") or _extract_field(readme, "Client")
     tech = _extract_field(agents, "Tech stack")
 
-    current_sprint = _extract_section_paragraph(state, "Active sprint") or "_(no active sprint listed)_"
+    # Prefer the sprint directory listing (ground truth) over whatever
+    # STATE.md says, which drifts. Fall back to STATE.md only if no
+    # canonical NNN- sprint folders exist.
+    active_sprint_for_label = _active_sprint_path(project)
+    if active_sprint_for_label is not None:
+        current_sprint = _format_sprint_label(active_sprint_for_label)
+    else:
+        current_sprint = _extract_section_paragraph(state, "Active sprint") or "_(no active sprint listed)_"
     status = _extract_section_paragraph(state, "Status") or "_(no current status)_"
     next_action = _extract_section_paragraph(state, "Next action") or "_(no next action)_"
 
-    top_decisions = _top_bullets(decisions, "Decisions captured", MAX_BULLETS)
+    # Combine init + post-init decisions, freshest first. DECISIONS.md may
+    # have both 'Decisions captured during Sprint 001 discovery' (init) and
+    # 'Decisions added after init' (from `socrates decide`).
+    post_init_decisions = _top_bullets(decisions, "Decisions added after init", MAX_BULLETS)
+    init_decisions = _top_bullets(decisions, "Decisions captured", MAX_BULLETS)
+    top_decisions = [*post_init_decisions, *init_decisions][:MAX_BULLETS]
     out_of_scope = _top_bullets(decisions, "Explicitly out of scope", MAX_BULLETS)
     top_risks = _top_bullets(risks, "Risks", MAX_BULLETS)
     top_questions = _top_bullets(questions, "Open", MAX_BULLETS)
@@ -177,7 +198,7 @@ def write_welcome(project: Path) -> Path:
     """Write WELCOME.md into the project root and return its path."""
     body = synthesize_welcome(project)
     target = project / "WELCOME.md"
-    target.write_text(body)
+    target.write_text(body, encoding="utf-8")
     return target
 
 
@@ -257,15 +278,77 @@ def _bullets_or(items: list[str], fallback: str) -> str:
     return "\n".join(f"- {item}" for item in items)
 
 
+_POST_INIT_BULLET = re.compile(r"^-\s*\*?\*?(.+?)\*?\*?\s*$")
+
+
+def _post_init_decisions(project: Path, limit: int = MAX_BULLETS) -> list[str]:
+    """Return up to *limit* bullets from DECISIONS.md's 'Decisions added
+    after init' section, most recent first.
+
+    `_synthesize_from_answers` otherwise misses every decision the operator
+    added via `socrates decide` after the initial interview.
+    """
+    decisions_path = project / "planning" / "DECISIONS.md"
+    if not decisions_path.is_file():
+        return []
+    text = decisions_path.read_text(errors="replace", encoding="utf-8")
+    capturing = False
+    items: list[str] = []
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if line.startswith("## "):
+            if capturing:
+                break
+            if "decisions added after init" in line.lower():
+                capturing = True
+            continue
+        if not capturing:
+            continue
+        stripped = line.lstrip()
+        if not stripped.startswith("- "):
+            continue
+        m = _POST_INIT_BULLET.match(stripped)
+        if not m:
+            continue
+        body = m.group(1).strip()
+        if body:
+            items.append(body)
+    # record_decision appends, so the newest live at the bottom; reverse so
+    # WELCOME.md shows the most recent first.
+    items.reverse()
+    return items[:limit]
+
+
 def _active_sprint_path(project: Path) -> Path | None:
     sprints = project / "planning" / "sprints"
     if not sprints.is_dir():
         return None
-    candidates = sorted(p for p in sprints.iterdir() if p.is_dir())
-    # Heuristic: the highest-numbered sprint folder.
-    if not candidates:
+    # Only count folders matching the canonical `NNN-...` pattern; ignore
+    # stray dirs (drafts, backups). Sort by parsed number so 010- beats 9-
+    # (lexical sort got this wrong once a project passed sprint 009).
+    canonical = re.compile(r"^(\d{3})-")
+    numbered = [
+        (int(m.group(1)), p)
+        for p in sprints.iterdir()
+        if p.is_dir() and (m := canonical.match(p.name))
+    ]
+    if not numbered:
         return None
-    return candidates[-1]
+    numbered.sort(key=lambda pair: pair[0])
+    return numbered[-1][1]
+
+
+def _format_sprint_label(sprint: Path | None) -> str:
+    """Turn `planning/sprints/005-rebate-engine` into `**005 — Rebate
+    Engine**` for the WELCOME.md header; placeholder if none exists."""
+    if sprint is None:
+        return "_(no sprint folders found — run `socrates init` first or add planning/sprints/NNN-…)_"
+    m = re.match(r"^(\d{3})-(.+)$", sprint.name)
+    if not m:
+        return f"**{sprint.name}**"
+    number, slug = m.group(1), m.group(2)
+    pretty = " ".join(part.capitalize() for part in slug.split("-"))
+    return f"**{number} — {pretty}**"
 
 
 def _start_pointer(sprint: Path | None) -> str:

@@ -14,12 +14,30 @@ import datetime as _dt
 import sys
 from pathlib import Path
 
+from socrates120x._atomic import locked_read_modify_write
+
 POST_INIT_HEADING = "## Decisions added after init"
 OUT_OF_SCOPE_HEADING = "## Explicitly out of scope"
 
 
 def record_decision(project: Path, text: str) -> int:
     """Append a dated decision to ``project/planning/DECISIONS.md``.
+
+    Read-modify-write is guarded by an exclusive POSIX file lock and
+    the final write is atomic (tempfile + os.replace). Without those:
+
+    - Two concurrent ``socrates decide`` invocations both read the same
+      pre-write contents, both compute new bodies, both write. The
+      second writer silently clobbers the first — one decision is lost.
+      An operator scripting batch decisions or running them from a CI
+      hook would have no way to detect the loss after the fact.
+    - A SIGINT (Ctrl-C) mid-write to a 5-10 KB DECISIONS.md leaves the
+      file truncated and unparseable. ``socrates timeline`` then crashes
+      and ``socrates audit`` reports the project as broken.
+
+    DECISIONS.md is the most load-bearing file in a 120x project; both
+    failure modes are unacceptable. Going through
+    :func:`locked_read_modify_write` addresses both at once.
 
     Returns a process exit code (0 success, 2 error).
     """
@@ -31,7 +49,11 @@ def record_decision(project: Path, text: str) -> int:
         )
         return 2
 
-    cleaned = text.strip()
+    # Collapse internal whitespace runs (including newlines, tabs) to single
+    # spaces. A multi-line decision (`socrates decide $'foo\nbar'`) would
+    # otherwise produce a bullet whose closing `**` lands on a different
+    # line, breaking markdown bold rendering and terminating the list item.
+    cleaned = " ".join(text.split())
     if not cleaned:
         print("error: decision text is empty", file=sys.stderr)
         return 2
@@ -39,9 +61,10 @@ def record_decision(project: Path, text: str) -> int:
     today = _dt.date.today().isoformat()
     bullet = f"- **{cleaned} ({today})**"
 
-    body = decisions_path.read_text()
-    new_body = _insert_decision(body, bullet)
-    decisions_path.write_text(new_body)
+    locked_read_modify_write(
+        decisions_path,
+        lambda current: _insert_decision(current, bullet),
+    )
     print(f"Appended to {decisions_path}:")
     print(f"  {bullet}")
     return 0

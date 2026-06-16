@@ -12,10 +12,12 @@ Reusing this class with a different `questions` tuple drives `extract`.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from socrates120x._atomic import atomic_write_text
 from socrates120x.prompting import (
     InputFn,
     OutputFn,
@@ -193,11 +195,34 @@ class Interview:
     questions: tuple[Question, ...] = field(default_factory=lambda: QUESTIONS)
 
     def load(self) -> None:
-        if self.answers_path.exists() and self.resume:
-            self.answers = json.loads(self.answers_path.read_text())
+        """Load answers from disk if --resume was passed.
+
+        A previous run that was killed mid-save could have left a corrupted
+        file. Instead of blowing up with a JSONDecodeError stacktrace, warn
+        the operator and start fresh — they'd have to re-answer questions
+        either way, and the alternative is unrecoverable from the CLI.
+        """
+        if not (self.answers_path.exists() and self.resume):
+            return
+        try:
+            self.answers = json.loads(self.answers_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            print(
+                f"warning: could not read {self.answers_path}: {e}\n"
+                f"  Starting interview from scratch. The corrupt file will be "
+                f"overwritten on the first answer.",
+                file=sys.stderr,
+            )
+            self.answers = {}
 
     def save(self) -> None:
-        self.answers_path.write_text(json.dumps(self.answers, indent=2) + "\n")
+        # Atomic write — without it, Ctrl-C during save() leaves a truncated
+        # file that crashes the next --resume. atomic_write_text defaults to
+        # UTF-8, keeping answer files locale-independent.
+        atomic_write_text(
+            self.answers_path,
+            json.dumps(self.answers, indent=2) + "\n",
+        )
 
     def run(
         self,

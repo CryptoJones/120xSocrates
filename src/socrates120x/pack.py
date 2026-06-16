@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import os
+import re
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -119,7 +120,7 @@ def write_pack(
         format=format,
     )
     target = project / f".socrates-architect-pack.{FORMAT_EXTENSIONS[format]}"
-    target.write_text(body)
+    target.write_text(body, encoding="utf-8")
     return target
 
 
@@ -233,7 +234,7 @@ def _kit_sections(kit: Path) -> list[_Section]:
         path = kit / name
         if not path.is_file():
             continue
-        text = path.read_text(errors="replace").strip()
+        text = path.read_text(errors="replace", encoding="utf-8").strip()
         if not text:
             continue
         out.append(_Section(
@@ -253,7 +254,7 @@ def _file_section(path: Path, *, rel_display: str, label: str) -> _Section:
             path=rel_display,
             kind="missing",
         )
-    text = path.read_text(errors="replace").strip()
+    text = path.read_text(errors="replace", encoding="utf-8").strip()
     if not text:
         return _Section(
             label=f"{label}  (`{rel_display}`)",
@@ -331,6 +332,16 @@ def _render_html(project: Path, sections: list[_Section]) -> str:
 
     Requires the ``markdown`` package. Install with
     ``pip install socrates120x[html]`` or ``pip install markdown``.
+
+    Security: planning files can contain arbitrary content the operator
+    pasted in (code samples, error logs, etc.). ``python-markdown`` passes
+    raw HTML through verbatim — there is no built-in safe mode in v3+. A
+    ``<script>`` snippet in any planning file would execute when the rendered
+    bundle is opened in a browser for preview. The bundle never needs
+    JavaScript itself, so we ship a strict Content-Security-Policy meta tag:
+    ``script-src 'none'`` blocks scripts and inline handlers, ``object-src``
+    / ``frame-src`` / ``base-uri`` 'none' block embeds, iframes, and ``<base>``
+    rewrites, while ``style-src 'unsafe-inline'`` keeps fenced-code styling.
     """
     md = _import_markdown()
     today = _dt.date.today().isoformat()
@@ -355,10 +366,21 @@ def _render_html(project: Path, sections: list[_Section]) -> str:
             f"<{tag}{attrs}>\n{label_html}  {body_html}\n</{tag}>"
         )
     body = "\n\n".join(rendered_sections)
+    csp = (
+        "default-src 'none'; "
+        "script-src 'none'; "
+        "object-src 'none'; "
+        "frame-src 'none'; "
+        "base-uri 'none'; "
+        "form-action 'none'; "
+        "style-src 'unsafe-inline'; "
+        "img-src data:"
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="{csp}">
 <title>Architect input bundle — {_xml_escape(project.name)}</title>
 <meta name="generated" content="{today}">
 <meta name="generator" content="socrates pack">
@@ -402,5 +424,16 @@ def _resolve_sprint(project: Path, name: str | None) -> Path | None:
     if name:
         candidate = sprints_dir / name
         return candidate if candidate.is_dir() else None
-    candidates = sorted(p for p in sprints_dir.iterdir() if p.is_dir())
-    return candidates[-1] if candidates else None
+    # Auto-detect the highest-numbered canonical NNN- sprint. Sort by parsed
+    # number so 010- beats 9- (lexical sort mis-ordered once past sprint 009)
+    # and so pack bundles the same "active" sprint status/onboard/timeline show.
+    canonical = re.compile(r"^(\d{3})-")
+    numbered = [
+        (int(m.group(1)), p)
+        for p in sprints_dir.iterdir()
+        if p.is_dir() and (m := canonical.match(p.name))
+    ]
+    if not numbered:
+        return None
+    numbered.sort(key=lambda pair: pair[0])
+    return numbered[-1][1]

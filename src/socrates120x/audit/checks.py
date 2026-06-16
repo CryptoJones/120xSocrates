@@ -55,6 +55,18 @@ WEASEL_WORDS = (
     "where applicable",
 )
 
+# Precompiled whole-phrase matchers. Naive substring search false-positived:
+# "TBD" matched "STBD pin", "as needed" matched "has needed" / "overseas
+# needed", "etc." matched "etcetera". Under --strict a spurious WARNING flips
+# the exit code and breaks CI — exactly the false-positive class the audit
+# promises to avoid. The (?<!\w)/(?!\w) lookarounds require a non-word
+# boundary without consuming an adjacent word char, so phrases ending in
+# punctuation ("etc.") still match before a space or end-of-line.
+_WEASEL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+    (w, re.compile(rf"(?<!\w){re.escape(w)}(?!\w)", re.IGNORECASE))
+    for w in WEASEL_WORDS
+)
+
 ALWAYS_ON_RISK_PHRASES = (
     "AI output is not source of truth",
     "ai output must not become the source of truth",
@@ -136,7 +148,7 @@ def _load_ignore_list(project: Path, section: str) -> set[str]:
     if not config_path.is_file():
         return set()
     try:
-        data = json.loads(config_path.read_text())
+        data = json.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return set()
     if not isinstance(data, dict):
@@ -198,7 +210,7 @@ class AdapterPointsToAgentsCheck(Check):
             path = project / adapter
             if not path.is_file():
                 continue
-            text = path.read_text(errors="replace")
+            text = path.read_text(errors="replace", encoding="utf-8")
             if "AGENTS.md" not in text:
                 findings.append(Finding(
                     check=self.name,
@@ -229,10 +241,9 @@ class WeaselWordsCheck(Check):
             acc = sprint / "acceptance.md"
             if not acc.is_file():
                 continue
-            for line_no, line in enumerate(acc.read_text(errors="replace").splitlines(), 1):
-                lower = line.lower()
-                for weasel in WEASEL_WORDS:
-                    if weasel.lower() in lower:
+            for line_no, line in enumerate(acc.read_text(errors="replace", encoding="utf-8").splitlines(), 1):
+                for weasel, pattern in _WEASEL_PATTERNS:
+                    if pattern.search(line):
                         findings.append(Finding(
                             check=self.name,
                             severity=Severity.WARNING,
@@ -258,7 +269,7 @@ class StateFreshnessCheck(Check):
         state = project / "planning" / "STATE.md"
         if not state.is_file():
             return []  # Already flagged by RequiredFilesCheck.
-        text = state.read_text(errors="replace")
+        text = state.read_text(errors="replace", encoding="utf-8")
         m = self._DATE.search(text)
         if not m:
             return [Finding(
@@ -294,7 +305,7 @@ class AlwaysOnRisksCheck(Check):
         risks = project / "planning" / "RISKS.md"
         if not risks.is_file():
             return []
-        lower = risks.read_text(errors="replace").lower()
+        lower = risks.read_text(errors="replace", encoding="utf-8").lower()
         if not any(phrase.lower() in lower for phrase in ALWAYS_ON_RISK_PHRASES):
             return [Finding(
                 check=self.name,
@@ -318,7 +329,7 @@ class TerminologyUsedCheck(Check):
         domain = project / "planning" / "DOMAIN.md"
         if not domain.is_file():
             return []
-        terms = self._extract_terms(domain.read_text(errors="replace"))
+        terms = self._extract_terms(domain.read_text(errors="replace", encoding="utf-8"))
         if not terms:
             return []
 
@@ -329,7 +340,15 @@ class TerminologyUsedCheck(Check):
             # They risk false-positive matches against unrelated text.
             if len(term) <= 3:
                 continue
-            if term.lower() not in other_text.lower():
+            # Word-boundary regex with kebab-friendly boundary chars (\w + -).
+            # Naive substring search false-positived: a defined term like
+            # "tier" matched "tiers" / "outlier" in any other file and
+            # silently suppressed the "term defined but unused" warning.
+            pattern = re.compile(
+                rf"(?<![\w-]){re.escape(term)}(?![\w-])",
+                flags=re.IGNORECASE,
+            )
+            if not pattern.search(other_text):
                 findings.append(Finding(
                     check=self.name,
                     severity=Severity.INFO,
@@ -366,7 +385,7 @@ class TerminologyUsedCheck(Check):
         for rel in candidates:
             path = project / rel
             if path.is_file():
-                parts.append(path.read_text(errors="replace"))
+                parts.append(path.read_text(errors="replace", encoding="utf-8"))
         # Also include sprint files.
         sprints = project / "planning" / "sprints"
         if sprints.is_dir():
@@ -374,7 +393,7 @@ class TerminologyUsedCheck(Check):
                 if not sprint.is_dir():
                     continue
                 for f in sprint.glob("*.md"):
-                    parts.append(f.read_text(errors="replace"))
+                    parts.append(f.read_text(errors="replace", encoding="utf-8"))
         return "\n".join(parts)
 
 

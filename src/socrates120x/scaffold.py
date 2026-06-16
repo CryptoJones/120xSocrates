@@ -57,7 +57,16 @@ def scaffold(target: Path, *, overwrite: bool = False) -> list[Path]:
 
     Returns the list of files created (or that already existed).
     Raises FileExistsError if *target* already exists and ``overwrite`` is False.
+    Raises NotADirectoryError if *target* already exists as a regular file —
+    previously the call cascaded into a confusing error from inside the
+    FILES/DIRS loop. Catch it up-front so the operator gets an actionable
+    message before any side effects.
     """
+    if target.exists() and target.is_file():
+        raise NotADirectoryError(
+            f"Cannot scaffold into a regular file: {target}. "
+            f"Pass a directory path (it will be created if missing)."
+        )
     if target.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite existing path: {target}")
 

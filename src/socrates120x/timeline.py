@@ -91,7 +91,7 @@ def _journal_events(project: Path) -> list[TimelineEvent]:
             d = _dt.date.fromisoformat(entry.stem)
         except ValueError:
             continue
-        first_line = _first_real_line(entry.read_text(errors="replace"))
+        first_line = _first_real_line(entry.read_text(errors="replace", encoding="utf-8"))
         events.append(TimelineEvent(
             date=d,
             kind=EventKind.JOURNAL,
@@ -119,7 +119,7 @@ def _sprint_events(project: Path) -> list[TimelineEvent]:
         req = sprint / "requirements.md"
         detail = ""
         if req.is_file():
-            detail = _extract_goal(req.read_text(errors="replace"))
+            detail = _extract_goal(req.read_text(errors="replace", encoding="utf-8"))
         events.append(TimelineEvent(
             date=mtime,
             kind=EventKind.SPRINT,
@@ -129,7 +129,15 @@ def _sprint_events(project: Path) -> list[TimelineEvent]:
     return events
 
 
-_DATED_DECISION = re.compile(r"\((\d{4}-\d{2}-\d{2})\)")
+# The date stamp `socrates decide` and `_decisions_md` both emit is anchored
+# at the END of the bullet, just before the closing `**` and any trailing
+# whitespace. Anchoring here stops a user-typed date in the decision body
+# (e.g. "Migrate by (2024-12-31) (2026-05-20)") from being read as the
+# recording date — the old unanchored regex took the FIRST match in the line.
+_DATED_DECISION_END = re.compile(r"\((\d{4}-\d{2}-\d{2})\)\*{0,2}\s*$")
+# Fallback: any (YYYY-MM-DD) anywhere, for older/hand-edited bullets that
+# don't end in the canonical `)**`. Used only if the anchored match fails.
+_DATED_DECISION_ANY = re.compile(r"\((\d{4}-\d{2}-\d{2})\)")
 
 
 def _decision_events(project: Path) -> list[TimelineEvent]:
@@ -137,11 +145,11 @@ def _decision_events(project: Path) -> list[TimelineEvent]:
     if not decisions_file.is_file():
         return []
     events: list[TimelineEvent] = []
-    for line in decisions_file.read_text(errors="replace").splitlines():
+    for line in decisions_file.read_text(errors="replace", encoding="utf-8").splitlines():
         stripped = line.lstrip()
         if not stripped.startswith("- "):
             continue
-        m = _DATED_DECISION.search(stripped)
+        m = _DATED_DECISION_END.search(stripped) or _DATED_DECISION_ANY.search(stripped)
         if not m:
             continue
         try:
@@ -149,7 +157,9 @@ def _decision_events(project: Path) -> list[TimelineEvent]:
         except ValueError:
             continue
         content = stripped[2:]  # strip "- "
-        content = _DATED_DECISION.sub("", content).strip()
+        # Strip ONLY the trailing date stamp (anchored) so dates in the body
+        # are preserved in the rendered timeline entry.
+        content = _DATED_DECISION_END.sub("", content).strip()
         content = content.strip("*").strip()
         events.append(TimelineEvent(
             date=d,

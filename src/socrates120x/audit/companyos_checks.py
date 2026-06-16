@@ -96,17 +96,20 @@ class OrphanPatternSourceCheck(Check):
         builds = project / "builds"
         if not patterns.is_dir() or not builds.is_dir():
             return []
-        build_names = {p.name for p in builds.iterdir() if p.is_dir()}
+        # Case-insensitive: a pattern citing source `Alpha` must not be
+        # flagged orphaned when the build dir is `alpha`. OrphanBuildsCheck
+        # already lowercases both sides for the client comparison; match it.
+        build_names = {p.name.lower() for p in builds.iterdir() if p.is_dir()}
         findings: list[Finding] = []
         for pattern in sorted(patterns.glob("*.md")):
             if pattern.name == "README.md":
                 continue
-            body = pattern.read_text(errors="replace")
+            body = pattern.read_text(errors="replace", encoding="utf-8")
             m = self._SOURCE_LINE.search(body)
             if not m:
                 continue
             source = m.group(1).strip()
-            if source not in build_names:
+            if source.lower() not in build_names:
                 findings.append(Finding(
                     check=self.name,
                     severity=Severity.WARNING,
@@ -137,7 +140,7 @@ class StaleProposalCheck(Check):
         if not proposals.is_file() or not builds.is_dir():
             return []
         build_names = {p.name for p in builds.iterdir() if p.is_dir()}
-        body = proposals.read_text(errors="replace")
+        body = proposals.read_text(errors="replace", encoding="utf-8")
         findings: list[Finding] = []
         seen: set[str] = set()
         for m in self._SLUG.finditer(body):
@@ -167,7 +170,7 @@ def _build_client_reference(build: Path) -> str | None:
     if answers.is_file():
         import json
         try:
-            data = json.loads(answers.read_text())
+            data = json.loads(answers.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 v = data.get("client")
                 if isinstance(v, str) and v.strip():
@@ -176,7 +179,7 @@ def _build_client_reference(build: Path) -> str | None:
             pass
     agents = build / "AGENTS.md"
     if agents.is_file():
-        text = agents.read_text(errors="replace")
+        text = agents.read_text(errors="replace", encoding="utf-8")
         m = re.search(r"Client:\s*\*\*([^*\n]+)\*\*", text)
         if m:
             return m.group(1).strip()

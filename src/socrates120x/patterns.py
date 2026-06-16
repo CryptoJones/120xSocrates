@@ -25,6 +25,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from socrates120x._atomic import atomic_write_text
+
 STALE_CANDIDATE_DAYS = 90
 USAGE_CACHE_FILENAME = ".usage-cache.json"
 USAGE_CACHE_VERSION = 2
@@ -85,7 +87,7 @@ def review_patterns(companyos_root: Path, *, use_cache: bool = True) -> PatternR
             candidates += 1
         else:
             promoted += 1
-        body = pattern.read_text(errors="replace")
+        body = pattern.read_text(errors="replace", encoding="utf-8")
         source = _extract_source_project(body)
         extracted = _extract_extracted_date(body)
 
@@ -102,8 +104,14 @@ def review_patterns(companyos_root: Path, *, use_cache: bool = True) -> PatternR
                     ),
                 ))
 
-        # Orphan source check.
-        if source and build_names is not None and source not in build_names:
+        # Orphan source check. Case-insensitive: a pattern citing source
+        # `Alpha` must not be flagged as orphaned when the build dir is
+        # `alpha` (folder-name casing is not semantically meaningful here).
+        if (
+            source
+            and build_names is not None
+            and source.lower() not in {b.lower() for b in build_names}
+        ):
             findings.append(PatternFinding(
                 kind=FindingKind.ORPHAN,
                 path=pattern,
@@ -190,7 +198,7 @@ def _compute_usage_map(
         ):
             matched = [str(s) for s in cached_proj["matched_slugs"] if isinstance(s, str)]
         else:
-            matched = [s for s in current_slugs if _slug_in_project(s, project_dir)]
+            matched = _matched_slugs_in_project(current_slugs, project_dir)
         new_projects[name] = {"mtime": live_mtime, "matched_slugs": matched}
 
     # Persist the refreshed cache.
@@ -211,14 +219,62 @@ def _compute_usage_map(
     return inverted
 
 
-def _slug_in_project(slug: str, project_dir: Path) -> bool:
-    needle = slug.lower()
+def _slug_pattern(slug: str) -> re.Pattern[str]:
+    """Compile a whole-token matcher for *slug*.
+
+    Naive substring match false-positived on short slugs: ``auth`` matched
+    ``author`` / ``authority``, ``api`` matched ``apiary``. The "unused
+    candidate" report then silently hid genuinely unused patterns. Custom
+    boundary chars (``\\w`` plus ``-``) handle kebab-case slugs: ``validate``
+    won't match inside ``validate-numbers`` and ``auth`` won't match inside
+    ``author``. ``re.escape`` protects against metacharacters in slug names.
+    """
+    return re.compile(
+        rf"(?<![\w-]){re.escape(slug.lower())}(?![\w-])",
+        flags=re.IGNORECASE,
+    )
+
+
+def _matched_slugs_in_project(slugs: list[str], project_dir: Path) -> list[str]:
+    """Return the subset of *slugs* appearing as whole tokens in any .md file
+    under *project_dir*, preserving the input order.
+
+    Reads each file exactly once and tests every still-unmatched slug against
+    it, rather than re-walking the whole tree once per slug. On a CompanyOS
+    with S patterns and F markdown files per project this turns the
+    per-project cost from O(S*F) reads into O(F) — the difference between
+    "snappy" and "seconds per project" on a large factory (and the cache only
+    amortizes repeat runs; the first/invalidated run still pays this cost).
+    """
+    if not slugs:
+        return []
+    patterns = {s: _slug_pattern(s) for s in slugs}
+    remaining = set(slugs)
     for f in project_dir.rglob("*.md"):
+        if not remaining:
+            break
         try:
-            text = f.read_text(errors="replace").lower()
+            text = f.read_text(errors="replace", encoding="utf-8")
         except OSError:
             continue
-        if needle in text:
+        for slug in list(remaining):
+            if patterns[slug].search(text):
+                remaining.discard(slug)
+    return [s for s in slugs if s not in remaining]
+
+
+def _slug_in_project(slug: str, project_dir: Path) -> bool:
+    """True if *slug* appears as a complete token in any .md file under
+    *project_dir*. Single-slug convenience wrapper; the hot path uses
+    :func:`_matched_slugs_in_project` to read each file only once.
+    """
+    pattern = _slug_pattern(slug)
+    for f in project_dir.rglob("*.md"):
+        try:
+            text = f.read_text(errors="replace", encoding="utf-8")
+        except OSError:
+            continue
+        if pattern.search(text):
             return True
     return False
 
@@ -245,7 +301,7 @@ def _load_usage_cache(patterns_dir: Path) -> dict[str, Any] | None:
     if not cache_path.is_file():
         return None
     try:
-        data = json.loads(cache_path.read_text())
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(data, dict):
@@ -258,10 +314,22 @@ def _load_usage_cache(patterns_dir: Path) -> dict[str, Any] | None:
 
 
 def _save_usage_cache(patterns_dir: Path, payload: dict[str, Any]) -> None:
+    """Persist the usage cache atomically.
+
+    `socrates patterns review` on a CompanyOS with many projects can take
+    seconds. A SIGINT mid-write would leave a truncated/invalid cache file
+    that then crashes the next run inside json.loads. Going through
+    atomic_write_text (tempfile + os.replace) keeps the cache either fully
+    old or fully new — never half-written. A failed write is swallowed: the
+    cache is an optimization, not source of truth.
+    """
     if not patterns_dir.is_dir():
         return
     with contextlib.suppress(OSError):
-        (patterns_dir / USAGE_CACHE_FILENAME).write_text(json.dumps(payload, indent=2))
+        atomic_write_text(
+            patterns_dir / USAGE_CACHE_FILENAME,
+            json.dumps(payload, indent=2),
+        )
 
 
 def format_pattern_report(report: PatternReport, *, use_color: bool | None = None) -> str:
