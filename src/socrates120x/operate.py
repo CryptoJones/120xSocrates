@@ -317,10 +317,8 @@ def _sprint_events(project: Path) -> list[TimelineEvent]:
     for sprint in sorted(p for p in sprints.iterdir() if p.is_dir()):
         if not re.match(r"^\d{3}-", sprint.name):
             continue
-        # Use directory mtime as a proxy for "when did this sprint exist"?
-        try:
-            mtime = _dt.date.fromtimestamp(sprint.stat().st_mtime)
-        except OSError:
+        date = _sprint_date(sprint)
+        if date is None:
             continue
         title = f"sprint {sprint.name}"
         # Pull the requirements goal as detail if present.
@@ -329,12 +327,40 @@ def _sprint_events(project: Path) -> list[TimelineEvent]:
         if req.is_file():
             detail = _extract_goal(req.read_text(errors="replace", encoding="utf-8"))
         events.append(TimelineEvent(
-            date=mtime,
+            date=date,
             kind=EventKind.SPRINT,
             title=title,
             detail=detail,
         ))
     return events
+
+
+# A sprint folder carries no inherent date, but operators often add a
+# "Last updated:" / "Created:" stamp to its files. Prefer that (it survives
+# clone/rsync/restore) over the directory mtime, which any copy resets.
+_SPRINT_DATE_RE = re.compile(
+    r"(?:Last updated|Created)\s*:?\s*(\d{4}-\d{2}-\d{2})", re.IGNORECASE
+)
+
+
+def _sprint_date(sprint: Path) -> _dt.date | None:
+    """Best-effort timeline date for a sprint: a labeled date stamp inside its
+    files if present, else the directory mtime as a last resort."""
+    for md in sorted(sprint.glob("*.md")):
+        try:
+            text = md.read_text(errors="replace", encoding="utf-8")
+        except OSError:
+            continue
+        m = _SPRINT_DATE_RE.search(text)
+        if m:
+            try:
+                return _dt.date.fromisoformat(m.group(1))
+            except ValueError:
+                continue
+    try:
+        return _dt.date.fromtimestamp(sprint.stat().st_mtime)
+    except OSError:
+        return None
 
 
 # The date stamp `socrates decide` and `_decisions_md` both emit is
@@ -383,6 +409,20 @@ def _decision_events(project: Path) -> list[TimelineEvent]:
 # ---------------------------------------------------------------------------
 # Small helpers
 # ---------------------------------------------------------------------------
+
+
+_ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+
+
+def _pad_visible(s: str, width: int) -> str:
+    """Left-justify *s* to *width*, counting only visible (non-ANSI) chars.
+
+    f-string width specifiers (``:<8``) count the invisible color-escape bytes,
+    so colored status cells under-pad and the table columns drift on a TTY.
+    Measure the ANSI-stripped width instead.
+    """
+    visible = len(_ANSI_RE.sub("", s))
+    return s + " " * max(0, width - visible)
 
 
 def _first_real_line(text: str) -> str:
@@ -682,7 +722,8 @@ def format_status(rows: list[ProjectStatus], *, use_color: bool | None = None) -
         )
         lines.append(
             f"{r.name:<{name_w}}  {r.active_sprint:<{sprint_w}}  "
-            f"{audit_chunk:<8}  {state_chunk:<10}  {journal_chunk:<10}  {extract_chunk}"
+            f"{_pad_visible(audit_chunk, 8)}  {_pad_visible(state_chunk, 10)}  "
+            f"{_pad_visible(journal_chunk, 10)}  {extract_chunk}"
         )
         if r.tagline:
             lines.append(f"{'':<{name_w}}    {_dim(r.tagline, use_color)}")
@@ -739,7 +780,14 @@ def _project_tagline(project: Path) -> str:
             pass
     agents = project / "AGENTS.md"
     if agents.is_file():
-        m = re.search(r"\*\*[^*]+\*\*\s+—\s+(.+)", agents.read_text(errors="replace", encoding="utf-8"))
+        # Anchor to the project's own bold-name line ("**<name>** — tagline",
+        # emitted by kit._agents_md) so an unrelated "**bold** — text" bullet
+        # elsewhere in the file can't hijack the tagline. If the line isn't
+        # found, return "" rather than a wrong guess.
+        m = re.search(
+            rf"\*\*{re.escape(project.name)}\*\*\s+—\s+(.+)",
+            agents.read_text(errors="replace", encoding="utf-8"),
+        )
         if m:
             return m.group(1).strip()
     return ""
@@ -749,7 +797,13 @@ def _extract_active_sprint(project: Path) -> str:
     sprints = project / "planning" / "sprints"
     if not sprints.is_dir():
         return "—"
-    candidates = sorted(p.name for p in sprints.iterdir() if p.is_dir())
+    # Only NNN-slug folders are sprints; a stray scratch dir (e.g.
+    # "wip-experiments") sorts above "001-…" and must not be mistaken for the
+    # active sprint. Zero-padded NNN means lexicographic == numeric order.
+    candidates = sorted(
+        p.name for p in sprints.iterdir()
+        if p.is_dir() and re.match(r"^\d{3}-", p.name)
+    )
     if not candidates:
         return "—"
     # Heuristic: highest-numbered sprint folder. Strip the slug — show NNN-name

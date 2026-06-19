@@ -40,6 +40,30 @@ def test_journal_creates_today_entry(project: Path) -> None:
     assert "What happened" in body
 
 
+def test_cmd_journal_refuses_without_tty(project: Path, monkeypatch) -> None:
+    # Regression (#30): opening an entry launches $EDITOR, so a non-interactive
+    # context must be refused (like init/extract) rather than spawning the
+    # editor against a non-TTY and hanging.
+    import argparse
+
+    from socrates120x.cli import _cmd_journal
+
+    monkeypatch.setattr("socrates120x.cli.is_interactive", lambda: False)
+    args = argparse.Namespace(path=project, show=False, list_all=False)
+    assert _cmd_journal(args) == 2
+
+
+def test_cmd_journal_show_allowed_without_tty(project: Path, monkeypatch) -> None:
+    # --show opens no editor, so the TTY guard must not block it.
+    import argparse
+
+    from socrates120x.cli import _cmd_journal
+
+    monkeypatch.setattr("socrates120x.cli.is_interactive", lambda: False)
+    args = argparse.Namespace(path=project, show=True, list_all=False)
+    assert _cmd_journal(args) == 0
+
+
 def test_journal_list_empty_then_with_entry(project: Path, capsys: pytest.CaptureFixture) -> None:
     code = create_or_open_entry(project, list_all=True)
     assert code == 0

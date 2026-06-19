@@ -142,3 +142,41 @@ def test_latest_journal_age_ignores_non_date_files(tmp_path: Path) -> None:
     (journal / f"{today}.md").write_text("entry", encoding="utf-8")
     (journal / "notes.md").write_text("scratch", encoding="utf-8")
     assert _latest_journal_age_days(tmp_path) == 0
+
+
+def test_active_sprint_ignores_non_numbered_folder(tmp_path: Path) -> None:
+    # Regression (#32): a stray scratch folder sorts above "001-…" but must
+    # not be reported as the active sprint.
+    from socrates120x.operate import _extract_active_sprint
+
+    sprints = tmp_path / "planning" / "sprints"
+    sprints.mkdir(parents=True)
+    (sprints / "001-foundations").mkdir()
+    (sprints / "wip-experiments").mkdir()
+    assert _extract_active_sprint(tmp_path) == "001-foundations"
+
+
+def test_tagline_ignores_unrelated_bold_dash(tmp_path: Path) -> None:
+    # Regression (#33): an unrelated "**bold** — text" line must not hijack the
+    # tagline; only the project's own "**<name>** — tagline" line counts.
+    from socrates120x.operate import _project_tagline
+
+    proj = tmp_path / "demo"
+    proj.mkdir()
+    (proj / "AGENTS.md").write_text(
+        "# AGENTS.md — demo\n\n**Owner** — Jane (rotating)\n\n**demo** — the real tagline\n",
+        encoding="utf-8",
+    )
+    assert _project_tagline(proj) == "the real tagline"
+
+
+def test_pad_visible_counts_only_visible_chars() -> None:
+    # Regression (#34): padding must measure visible width, ignoring ANSI bytes.
+    import re
+
+    from socrates120x.operate import _pad_visible
+
+    padded = _pad_visible("\033[32mOK\033[0m", 5)
+    visible = re.sub(r"\033\[[0-9;]*m", "", padded)
+    assert len(visible) == 5
+    assert padded.endswith("   ")

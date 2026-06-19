@@ -26,6 +26,28 @@ def project(tmp_path: Path) -> Path:
     return p
 
 
+def test_sprint_date_prefers_labeled_stamp(tmp_path: Path) -> None:
+    # Regression (#31): a labeled date stamp in the sprint files is preferred
+    # over directory mtime (which a clone/restore resets).
+    from socrates120x.operate import _sprint_date
+
+    sprint = tmp_path / "001-discovery"
+    sprint.mkdir()
+    (sprint / "requirements.md").write_text(
+        "# Requirements\n\nLast updated: 2025-01-15\n", encoding="utf-8"
+    )
+    assert _sprint_date(sprint) == _dt.date(2025, 1, 15)
+
+
+def test_sprint_date_falls_back_to_mtime(tmp_path: Path) -> None:
+    from socrates120x.operate import _sprint_date
+
+    sprint = tmp_path / "002-build"
+    sprint.mkdir()
+    (sprint / "requirements.md").write_text("# Requirements\n\nno date here\n", encoding="utf-8")
+    assert _sprint_date(sprint) is not None  # mtime fallback
+
+
 def test_timeline_includes_journal_entries(project: Path) -> None:
     journal = project / "planning" / "journal"
     yesterday = _dt.date.today() - _dt.timedelta(days=1)

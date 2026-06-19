@@ -119,6 +119,26 @@ def test_top_bullets_extracts_first_n() -> None:
     assert bullets == ["first risk", "second risk"]
 
 
+def test_top_bullets_newest_first_for_post_init_decisions() -> None:
+    # Regression (#35): post-init decisions are appended to the bottom by
+    # record_decision; the markdown onboard path must surface the newest first
+    # (matching the answers-JSON path) and drop the OLDEST past the cap.
+    text = """## Decisions added after init
+- oldest decision
+- middle decision
+- newest decision
+"""
+    assert _top_bullets(text, "Decisions added after init", 2, newest_first=True) == [
+        "newest decision",
+        "middle decision",
+    ]
+    # Default (every other section) stays oldest-first.
+    assert _top_bullets(text, "Decisions added after init", 2) == [
+        "oldest decision",
+        "middle decision",
+    ]
+
+
 def test_welcome_prefers_answers_json_when_present(clean_project: Path) -> None:
     """If .socrates-answers.json exists, the synthesis should use it directly.
 
@@ -281,8 +301,10 @@ def test_synthesize_orders_post_init_decisions_first(tmp_path) -> None:
         "sprint1_inspect": [], "state_current": "", "state_next": "", "state_blockers": [],
     })
     record_decision(p, "NEWER reversal — chose other thing after experiment")
+    record_decision(p, "NEWEST tweak — final adjustment after review")
 
     text = synthesize_welcome(p)
-    assert text.index("NEWER reversal") < text.index("ORIGINAL choice"), (
-        "post-init decision should appear above the init-time decision"
+    # Newest-first among multiple post-init decisions, and all above init-time.
+    assert text.index("NEWEST tweak") < text.index("NEWER reversal") < text.index("ORIGINAL choice"), (
+        "post-init decisions should appear newest-first, above the init-time decision"
     )

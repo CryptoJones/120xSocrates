@@ -641,6 +641,17 @@ def _cmd_journal(args: argparse.Namespace) -> int:
     if not path.is_dir():
         print(f"error: {path} is not a directory", file=sys.stderr)
         return 2
+    # Opening today's entry launches $EDITOR; refuse in a non-interactive
+    # context (CI, pipe, git hook) the way init/extract do — otherwise the
+    # editor is spawned against a non-TTY and hangs. --show / --list don't
+    # open an editor, so they're allowed.
+    if not args.show and not args.list_all and not is_interactive():
+        print(
+            "error: socrates journal needs a TTY to open the editor. "
+            "Re-run from an interactive terminal, or pass --show / --list.",
+            file=sys.stderr,
+        )
+        return 2
     return create_or_open_entry(path, show=args.show, list_all=args.list_all)
 
 

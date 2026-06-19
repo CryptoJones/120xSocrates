@@ -324,7 +324,16 @@ def _ask_multiline_editor(
 
     try:
         output_fn(f"   (opening {editor[0]} — save & quit to submit)")
-        subprocess.run([*editor, str(tmp_path)], check=True)
+        try:
+            subprocess.run([*editor, str(tmp_path)], check=True)
+        except (subprocess.CalledProcessError, OSError) as exc:
+            # Editor exited non-zero (e.g. vim :cq), was killed, or isn't
+            # actually executable. Don't crash the whole interview with an
+            # uncaught traceback (cli/extract only catch KeyboardInterrupt /
+            # EOFError) — fall back to the inline prompt, which handles the
+            # required/EOF cases correctly.
+            output_fn(f"   (editor unavailable: {exc} — falling back to inline prompt)")
+            return _ask_multiline(input_fn, output_fn, q)
         raw = tmp_path.read_text(encoding="utf-8")
     finally:
         with contextlib.suppress(OSError):
@@ -339,8 +348,11 @@ def _ask_multiline_editor(
         return q.default
     if not body and q.required:
         if _attempt >= 2:
-            output_fn("   (still empty after several tries — leaving this blank)")
-            return ""
+            # Consistent with _ask_line/_ask_multiline: a required field that
+            # stays empty aborts the interview cleanly (the caller saves
+            # progress and suggests --resume) rather than silently storing "".
+            output_fn("   (still empty after several tries — aborting; re-run with --resume)")
+            raise EOFError
         output_fn("   (this one is required — re-opening editor)")
         return _ask_multiline_editor(
             output_fn, q, input_fn=input_fn, _attempt=_attempt + 1

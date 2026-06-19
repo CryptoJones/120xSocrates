@@ -119,7 +119,9 @@ def _synthesize_from_markdown(project: Path) -> str:
     # two sections: 'Decisions captured during Sprint 001 discovery' (init)
     # AND 'Decisions added after init' (from `socrates decide`). Show the
     # freshest first.
-    post_init_decisions = _top_bullets(decisions, "Decisions added after init", MAX_BULLETS)
+    post_init_decisions = _top_bullets(
+        decisions, "Decisions added after init", MAX_BULLETS, newest_first=True
+    )
     init_decisions = _top_bullets(decisions, "Decisions captured", MAX_BULLETS)
     top_decisions = [*post_init_decisions, *init_decisions][:MAX_BULLETS]
     out_of_scope = _top_bullets(decisions, "Explicitly out of scope", MAX_BULLETS)
@@ -255,8 +257,15 @@ def _extract_section_paragraph(text: str, heading: str) -> str:
     return "\n".join(body).strip()
 
 
-def _top_bullets(text: str, heading_substr: str, n: int) -> list[str]:
-    """Return the first n top-level `- ` bullets under a heading that matches heading_substr."""
+def _top_bullets(
+    text: str, heading_substr: str, n: int, *, newest_first: bool = False
+) -> list[str]:
+    """Return up to n top-level `- ` bullets under a heading matching heading_substr.
+
+    File order (oldest first) by default. Pass ``newest_first=True`` for
+    sections like "Decisions added after init" where `record_decision` appends
+    new entries to the bottom and the freshest should surface first — matching
+    the answers-JSON path (`_post_init_decisions`)."""
     lines = text.splitlines()
     capturing = False
     items: list[str] = []
@@ -273,9 +282,11 @@ def _top_bullets(text: str, heading_substr: str, n: int) -> list[str]:
                 item = stripped[2:].strip().strip("*").strip()
                 if item:
                     items.append(item)
-                    if len(items) >= n:
+                    if not newest_first and len(items) >= n:
                         break
-    return items
+    if newest_first:
+        items.reverse()
+    return items[:n]
 
 
 def _bullets_or(items: list[str], fallback: str) -> str:

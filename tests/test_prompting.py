@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from unittest.mock import patch
 
+import pytest
+
 from socrates120x import Question, ask, editor_command
+from socrates120x.support import _ask_multiline_editor
 
 
 class _FakeIO:
@@ -101,3 +105,36 @@ def test_editor_command_recovers_from_unbalanced_quotes(monkeypatch) -> None:
     cmd = editor_command()
     assert cmd is not None
     assert "broken" in cmd
+
+
+# ---------------------------------------------------------------------------
+# editor path failure handling (#28, #29)
+# ---------------------------------------------------------------------------
+
+
+def test_editor_failure_falls_back_to_inline(monkeypatch) -> None:
+    # Regression (#28): a non-zero editor exit (CalledProcessError) used to
+    # escape both interview handlers and dump a traceback. Now it falls back
+    # to the inline prompt instead.
+    monkeypatch.setattr("socrates120x.support.editor_command", lambda: ["fakeeditor"])
+
+    def boom(*_a, **_k):
+        raise subprocess.CalledProcessError(1, "fakeeditor")
+
+    monkeypatch.setattr("socrates120x.support.subprocess.run", boom)
+    io = _FakeIO(["typed inline", "."])
+    q = Question(key="x", prompt="?", section="s", type="multiline")
+    result = _ask_multiline_editor(io.output_fn, q, input_fn=io.input_fn)
+    assert result == "typed inline"
+
+
+def test_editor_required_empty_aborts_after_cap(monkeypatch) -> None:
+    # Regression (#29): a required field that stays empty across the editor
+    # retry cap must abort (EOFError) rather than silently storing "".
+    monkeypatch.setattr("socrates120x.support.editor_command", lambda: ["fakeeditor"])
+    # No-op editor leaves only the comment header → empty body every time.
+    monkeypatch.setattr("socrates120x.support.subprocess.run", lambda *_a, **_k: None)
+    io = _FakeIO([])
+    q = Question(key="x", prompt="?", section="s", type="multiline", required=True)
+    with pytest.raises(EOFError):
+        _ask_multiline_editor(io.output_fn, q, input_fn=io.input_fn)
