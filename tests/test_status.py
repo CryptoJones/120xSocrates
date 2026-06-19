@@ -128,3 +128,17 @@ def test_has_extract_false_when_only_mentioned_in_war_story(company: Path) -> No
         "regression: status falsely reports `alpha` as extracted because "
         "a different pattern's war story mentioned it in backticks"
     )
+
+
+def test_latest_journal_age_ignores_non_date_files(tmp_path: Path) -> None:
+    # Regression (#27): a stray non-date file (notes.md) sorts lexicographically
+    # above an ISO date and used to win max(stems), fail to parse, and make the
+    # journal age read as unknown despite a fresh dated entry existing.
+    from socrates120x.operate import _latest_journal_age_days
+
+    journal = tmp_path / "planning" / "journal"
+    journal.mkdir(parents=True)
+    today = _dt.date.today().isoformat()
+    (journal / f"{today}.md").write_text("entry", encoding="utf-8")
+    (journal / "notes.md").write_text("scratch", encoding="utf-8")
+    assert _latest_journal_age_days(tmp_path) == 0

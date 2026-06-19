@@ -325,8 +325,12 @@ def review_patterns(companyos_root: Path, *, use_cache: bool = True) -> PatternR
                     ),
                 ))
 
-        # Orphan source check.
-        if source and build_names is not None and source not in build_names:
+        # Orphan source check. Guard on a *non-empty* build set (truthy),
+        # not `is not None`: an existing-but-empty builds/ (a freshly
+        # scaffolded CompanyOS has only builds/README.md) is "nothing to
+        # check against", not "every source is orphaned". This matches the
+        # unused check below, which already guards on `if build_names`.
+        if source and build_names and source not in build_names:
             findings.append(PatternFinding(
                 kind=FindingKind.ORPHAN,
                 path=pattern,

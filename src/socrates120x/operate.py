@@ -529,23 +529,11 @@ def _journal_check(project: Path) -> ShipFinding:
 
 
 def _extract_check(project: Path) -> ShipFinding:
-    # Look for both local and CompanyOS-sibling patterns dirs.
-    candidate_locations = [project / "patterns"]
-    if project.parent.name == "builds":
-        candidate_locations.append(project.parent.parent / "patterns")
-
-    found = False
-    for loc in candidate_locations:
-        if not loc.is_dir():
-            continue
-        for f in loc.glob("CANDIDATE-*.md"):
-            text = f.read_text(errors="replace", encoding="utf-8")
-            if f"`{project.name}`" in text:
-                found = True
-                break
-        if found:
-            break
-
+    # Use the same authoritative check as `status` (_has_extract): a loose
+    # ``f"`{name}`" in text`` substring would PASS ship on a candidate that
+    # merely mentions the project in prose, green-lighting a sprint close on
+    # work that was never extracted.
+    found = _has_completed_extract(project)
     in_progress = (project / ".socrates-extract-answers.json").is_file()
 
     if found:
@@ -790,35 +778,40 @@ def _latest_journal_age_days(project: Path) -> int | None:
     journal = project / "planning" / "journal"
     if not journal.is_dir():
         return None
-    entries = [p for p in journal.glob("*.md") if p.name != "README.md"]
-    if not entries:
+    # Take the max over *parsed dates*, not raw stems. A stray non-date file
+    # (notes.md, README.md) sorts lexicographically above an ISO date and,
+    # under the old `max(stems)`, won the max, failed to parse, and made the
+    # whole journal age read as unknown despite a fresh dated entry existing.
+    dates: list[_dt.date] = []
+    for p in journal.glob("*.md"):
+        try:
+            dates.append(_dt.date.fromisoformat(p.stem))
+        except ValueError:
+            continue
+    if not dates:
         return None
-    latest_name = max(p.stem for p in entries)
-    try:
-        d = _dt.date.fromisoformat(latest_name)
-    except ValueError:
-        return None
-    return (_dt.date.today() - d).days
+    return (_dt.date.today() - max(dates)).days
 
 
-def _has_extract(project: Path) -> bool:
-    """A project has been "extracted" if any pattern candidate references it.
+def _has_completed_extract(project: Path) -> bool:
+    """True if a *finished* pattern candidate references *project*.
 
-    Two prior bugs fixed here:
-    - Each pattern file was read TWICE (once per substring check). On a
-      CompanyOS with N projects and M patterns, status() became O(N*M)
-      file reads. Read once, check both patterns against the same text.
-    - The fallback ``f"\\`{project.name}\\`" in text`` matched any backtick
-      mention of the project — a war story in pattern P that says
-      ``see \\`other-project\\` for context`` would falsely mark
-      other-project as having an extract. Drop the loose fallback; only
-      the explicit ``Source project | \\`name\\``` line is authoritative.
+    Authoritative source-of-truth for "was this project extracted", shared by
+    status (`_has_extract`) and ship (`_extract_check`) so the two commands
+    cannot disagree.
+
+    - A local ``patterns/`` dir with any ``CANDIDATE-*.md`` counts (that dir
+      belongs to the project itself).
+    - A sibling CompanyOS ``patterns/`` dir counts only on the explicit
+      ``Source project | `name``` line. A loose ``f"`{name}`" in text`` match
+      would false-positive on a war story in an unrelated candidate that just
+      mentions ``\\`name\\`` in prose — the exact bug ship used to carry.
     """
     # 1) Local patterns/ dir with CANDIDATE-*.md.
     local = project / "patterns"
     if local.is_dir() and any(local.glob("CANDIDATE-*.md")):
         return True
-    # 2) Sibling CompanyOS patterns/ dir.
+    # 2) Sibling CompanyOS patterns/ dir — authoritative marker only.
     parent = project.parent
     if parent.name == "builds":
         sibling = parent.parent / "patterns"
@@ -835,7 +828,15 @@ def _has_extract(project: Path) -> bool:
                     continue
                 if source_marker in text or source_marker_alt in text:
                     return True
-    # 3) Or has an in-progress extract answers file.
+    return False
+
+
+def _has_extract(project: Path) -> bool:
+    """A project is "extracted" if a finished candidate references it, OR an
+    extract is in progress (the answers file exists)."""
+    if _has_completed_extract(project):
+        return True
+    # In-progress extract answers file.
     return (project / ".socrates-extract-answers.json").is_file()
 
 

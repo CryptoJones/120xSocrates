@@ -79,11 +79,25 @@ def test_patterns_review_flags_stale_candidate(company: Path) -> None:
 
 
 def test_patterns_review_flags_orphan_source(company: Path) -> None:
+    # A real build must exist for a missing source to be "orphaned" — an
+    # empty builds/ means there is nothing to check provenance against.
+    _make_build(company, "alpha")
     today = _dt.date.today().isoformat()
     (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "ghost-project", "x"), encoding="utf-8")
     report = review_patterns(company)
     kinds = {f.kind for f in report.findings}
     assert FindingKind.ORPHAN in kinds
+
+
+def test_patterns_review_no_orphan_when_builds_empty(company: Path) -> None:
+    # Regression (#25): a freshly-scaffolded CompanyOS has an empty builds/
+    # (only builds/README.md). A candidate's source must NOT be flagged
+    # orphan when there are no builds to check provenance against.
+    today = _dt.date.today().isoformat()
+    (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "ghost-project", "x"), encoding="utf-8")
+    report = review_patterns(company)
+    kinds = {f.kind for f in report.findings}
+    assert FindingKind.ORPHAN not in kinds
 
 
 def test_patterns_review_quiet_when_pattern_reused_elsewhere(company: Path) -> None:
@@ -128,6 +142,7 @@ def test_format_pattern_report_clean(company: Path) -> None:
 
 
 def test_format_pattern_report_groups_by_kind(company: Path) -> None:
+    _make_build(company, "alpha")  # non-empty builds/ so a missing source is orphaned
     today = _dt.date.today().isoformat()
     (company / "patterns" / "CANDIDATE-x.md").write_text(_pattern(today, "ghost", "x"), encoding="utf-8")
     report = review_patterns(company)

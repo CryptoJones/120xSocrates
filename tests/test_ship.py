@@ -7,7 +7,23 @@ from pathlib import Path
 
 import pytest
 
-from socrates120x import CheckResult, preflight, render_all, scaffold
+from socrates120x import (
+    CheckResult,
+    preflight,
+    render_all,
+    scaffold,
+    scaffold_companyos,
+)
+
+_ANSWERS = {
+    "project_name": "demo", "client": "Acme", "tagline": "t",
+    "business_goal": "g", "tech_stack": "Python",
+    "users": ["op"], "current_process": "m", "terminology": [],
+    "business_rules": [], "decisions": [], "out_of_scope": [],
+    "risks": ["r"], "fragile_inputs": "", "open_questions": [],
+    "sprint1_goal": "", "sprint1_acceptance": ["ok"],
+    "sprint1_inspect": [], "state_current": "", "state_next": "", "state_blockers": [],
+}
 
 
 @pytest.fixture
@@ -78,3 +94,34 @@ def test_preflight_audit_fails_on_missing_required_file(project: Path) -> None:
     findings = preflight(project)
     audit = next(f for f in findings if f.name == "audit")
     assert audit.result is CheckResult.FAIL
+
+
+def _companyos_build(tmp_path: Path, name: str = "demo") -> Path:
+    root = tmp_path / "120x"
+    scaffold_companyos(root)
+    build = root / "builds" / name
+    scaffold(build)
+    render_all(build, {**_ANSWERS, "project_name": name})
+    return build
+
+
+def test_preflight_extract_ignores_loose_backtick_mention(tmp_path: Path) -> None:
+    # Regression (#26): ship must NOT PASS the extract check just because a
+    # different candidate name-drops the project in prose. Only the
+    # authoritative `Source project | `name`` line counts (same rule as
+    # `socrates status`).
+    build = _companyos_build(tmp_path, "demo")
+    (build.parent.parent / "patterns" / "CANDIDATE-other.md").write_text(
+        "**Source project** | `other`\n\nsee `demo` for context\n", encoding="utf-8"
+    )
+    extract = next(f for f in preflight(build) if f.name == "extract")
+    assert extract.result is CheckResult.WARN
+
+
+def test_preflight_extract_passes_on_sibling_source_marker(tmp_path: Path) -> None:
+    build = _companyos_build(tmp_path, "demo")
+    (build.parent.parent / "patterns" / "CANDIDATE-demo.md").write_text(
+        "**Source project** | `demo`\n", encoding="utf-8"
+    )
+    extract = next(f for f in preflight(build) if f.name == "extract")
+    assert extract.result is CheckResult.PASS

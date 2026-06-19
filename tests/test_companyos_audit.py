@@ -84,6 +84,17 @@ def test_orphan_builds_check_quiet_when_client_folder_exists(company: Path) -> N
     assert not any("RealClient" in f.message for f in findings)
 
 
+def test_orphan_builds_check_quiet_when_client_folder_is_slugified(company: Path) -> None:
+    # Regression (#24): the AGENTS.md reference is the display name
+    # "Acme Corp" but the folder is the kebab slug clients/acme-corp/.
+    # These must compare equal — otherwise every multi-word client name
+    # fired a spurious WARNING that failed --strict CI.
+    _make_build(company, "alpha", client="Acme Corp")
+    (company / "clients" / "acme-corp").mkdir()
+    findings = check_orphan_builds(company)
+    assert not any(f.severity is Severity.WARNING for f in findings)
+
+
 def test_orphan_pattern_source_check_fires(company: Path) -> None:
     (company / "patterns" / "CANDIDATE-x.md").write_text(
         "**Source project** | `ghost-project`\n"

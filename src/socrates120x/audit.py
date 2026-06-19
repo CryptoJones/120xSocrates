@@ -420,6 +420,15 @@ def check_companyos_structure(project: Path) -> list[Finding]:
     return findings
 
 
+def _client_slug(name: str) -> str:
+    """Normalize a client display name or folder name to a comparable slug.
+
+    Lowercase and collapse internal whitespace to single hyphens, so the
+    display name "Acme Corp" and the folder name "acme-corp" compare equal.
+    """
+    return re.sub(r"\s+", "-", name.strip().lower())
+
+
 def check_orphan_builds(project: Path) -> list[Finding]:
     """A build with no recorded client, or one whose client folder is missing.
 
@@ -431,7 +440,11 @@ def check_orphan_builds(project: Path) -> list[Finding]:
     clients = project / "clients"
     if not builds.is_dir() or not clients.is_dir():
         return []
-    client_names = {p.name.lower() for p in clients.iterdir() if p.is_dir()}
+    # Normalize both sides to the same slug form before comparing: client
+    # *folders* are kebab-slugs (clients/acme-corp/) while the AGENTS.md
+    # reference is the human display name ("Acme Corp"). Without this, every
+    # multi-word client name spuriously fired a WARNING (→ --strict CI fail).
+    client_names = {_client_slug(p.name) for p in clients.iterdir() if p.is_dir()}
     findings: list[Finding] = []
     for build in sorted(builds.iterdir()):
         if not build.is_dir() or not (build / "planning").is_dir():
@@ -446,8 +459,8 @@ def check_orphan_builds(project: Path) -> list[Finding]:
             ))
             continue
         if (
-            referenced_client.lower() not in client_names
-            and referenced_client.lower() != "internal"
+            _client_slug(referenced_client) not in client_names
+            and _client_slug(referenced_client) != "internal"
         ):
             findings.append(Finding(
                 "orphan-builds", Severity.WARNING,
