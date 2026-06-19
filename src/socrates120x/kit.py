@@ -12,6 +12,8 @@ import datetime as _dt
 from pathlib import Path
 from typing import Any
 
+from socrates120x.support import atomic_write_text
+
 # ─────────────────────────────────────────────────────────────────────────────
 # scaffold — the canonical 120x Operators Kit project tree
 # Mirrors the kit's scaffold.sh byte-for-byte so socrates is self-contained.
@@ -97,10 +99,16 @@ def scaffold(target: Path, *, overwrite: bool = False) -> list[Path]:
 # render — write the answers dict into the 120x planning files
 # ─────────────────────────────────────────────────────────────────────────────
 
-def render_all(target: Path, answers: dict[str, Any]) -> list[Path]:
+def render_all(target: Path, answers: dict[str, Any], *, force: bool = False) -> list[Path]:
     """Write every planning/state/sprint file from *answers* into *target*.
 
-    Returns the list of files written.
+    Returns the list of files actually written.
+
+    By default an existing file that already has content is PRESERVED: a re-run
+    (e.g. ``init --no-scaffold`` into a populated folder) must not clobber
+    operator edits to living docs like STATE.md / DECISIONS.md. Freshly
+    scaffolded files are empty, so the first render still writes them all.
+    Pass ``force=True`` to regenerate everything from *answers*.
     """
     today = _dt.date.today().isoformat()
     ctx = {**answers, "today": today}
@@ -131,8 +139,14 @@ def render_all(target: Path, answers: dict[str, Any]) -> list[Path]:
     written: list[Path] = []
     for rel, body in files.items():
         path = target / rel
+        if (
+            not force
+            and path.is_file()
+            and path.read_text(errors="replace", encoding="utf-8").strip()
+        ):
+            continue  # preserve an existing file that already has real content
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        atomic_write_text(path, body)
         written.append(path)
     return written
 
@@ -668,7 +682,7 @@ def scaffold_companyos(target: Path, *, overwrite: bool = False) -> list[Path]:
     for rel, body in files.items():
         path = target / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        atomic_write_text(path, body)
         written.append(path)
     return written
 

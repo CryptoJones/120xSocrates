@@ -52,6 +52,30 @@ def test_render_writes_every_file(tmp_path: Path) -> None:
     assert len(written) >= 15
 
 
+def test_render_preserves_existing_content_without_force(tmp_path: Path) -> None:
+    # Regression (#23): a re-run (e.g. init --no-scaffold) must NOT clobber
+    # operator edits to living docs like STATE.md.
+    target = tmp_path / "demo"
+    scaffold(target)
+    render_all(target, _sample_answers())
+    state = target / "planning" / "STATE.md"
+    state.write_text("# STATE\n\nMy hand-edited status.\n", encoding="utf-8")
+
+    render_all(target, _sample_answers())  # second render, no force
+    assert "My hand-edited status." in state.read_text(encoding="utf-8")
+
+
+def test_render_force_overwrites_existing_content(tmp_path: Path) -> None:
+    target = tmp_path / "demo"
+    scaffold(target)
+    render_all(target, _sample_answers())
+    state = target / "planning" / "STATE.md"
+    state.write_text("# STATE\n\nMy hand-edited status.\n", encoding="utf-8")
+
+    render_all(target, _sample_answers(), force=True)
+    assert "My hand-edited status." not in state.read_text(encoding="utf-8")
+
+
 def test_render_propagates_client_terminology(tmp_path: Path) -> None:
     target = tmp_path / "demo"
     scaffold(target)

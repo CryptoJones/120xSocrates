@@ -78,6 +78,12 @@ def main(argv: list[str] | None = None) -> int:
         "--editor", action="store_true",
         help="For multi-line questions, open $EDITOR instead of prompting line-by-line.",
     )
+    init.add_argument(
+        "--force", action="store_true",
+        help="When rendering, overwrite existing planning files. Default: "
+             "preserve files that already have content (so a --no-scaffold "
+             "re-run does not clobber hand edits to STATE.md / DECISIONS.md).",
+    )
 
     timeline = sub.add_parser(
         "timeline",
@@ -449,8 +455,14 @@ def _cmd_init(args: argparse.Namespace) -> int:
         print("\nSkipping render (--no-render). Answers saved.")
         return 0
 
-    written = render_all(target, interview.answers)
+    written = render_all(target, interview.answers, force=args.force)
     print(f"\nWrote {len(written)} planning files into {target}.")
+    if args.no_scaffold and not args.force:
+        print(
+            "Note: existing files with content were preserved; "
+            "re-run with --force to regenerate them from your answers.",
+            file=sys.stderr,
+        )
     _print_outro(target, interview.answers)
     return 0
 
