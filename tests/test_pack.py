@@ -307,3 +307,26 @@ def test_pack_html_format_error_when_markdown_missing(
     monkeypatch.setattr(pack_module, "_import_markdown", _raise)
     with pytest.raises(RuntimeError, match="requires the `markdown` package"):
         build_pack(project, format="html")
+
+
+def test_import_markdown_converts_real_importerror(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Exercise the REAL try/except ImportError -> RuntimeError conversion in
+    # _import_markdown (the test above monkeypatches the helper away, so it
+    # never runs the actual conversion). Setting sys.modules["markdown"] = None
+    # makes `import markdown` raise ImportError without uninstalling the dep.
+    import sys
+
+    from socrates120x.synthesize import _import_markdown
+
+    monkeypatch.setitem(sys.modules, "markdown", None)
+    with pytest.raises(RuntimeError, match="requires the `markdown` package"):
+        _import_markdown()
+
+
+def test_xml_attr_escapes_quotes() -> None:
+    # Regression (#36/A2): attribute values must escape " (and &/<) so a quote
+    # in a path/label can't close the attribute and malform the XML/HTML.
+    from socrates120x.synthesize import _xml_attr
+
+    assert _xml_attr('001-acme"prod') == "001-acme&quot;prod"
+    assert _xml_attr("a & b < c") == "a &amp; b &lt; c"

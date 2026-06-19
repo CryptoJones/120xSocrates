@@ -373,6 +373,10 @@ def _validate_slug(slug: str, *, kind: str = "project") -> str | None:
         return f"{kind} slug cannot be empty."
     if "\x00" in slug:
         return f"{kind} slug cannot contain NUL bytes."
+    if "`" in slug:
+        # The slug is interpolated into fenced code blocks in the generated
+        # AGENTS.md/README.md; a backtick would break the fence.
+        return f"{kind} slug cannot contain backticks; got {slug!r}."
     if "/" in slug or "\\" in slug:
         return (
             f"{kind} slug must be a single path component "

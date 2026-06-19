@@ -93,14 +93,14 @@ def _insert_decision(body: str, bullet: str) -> str:
         while insert_at > post_init_idx + 1 and lines[insert_at - 1] == "":
             insert_at -= 1
         lines.insert(insert_at, bullet)
-        return "\n".join(lines) + ("\n" if body.endswith("\n") else "")
+        return "\n".join(lines) + "\n"
 
     # Need to create the section. Put it just before "Explicitly out of scope".
     section = ["", POST_INIT_HEADING, "", bullet, ""]
     if out_of_scope_idx is not None:
         for s in reversed(section):
             lines.insert(out_of_scope_idx, s)
-        return "\n".join(lines) + ("\n" if body.endswith("\n") else "")
+        return "\n".join(lines) + "\n"
 
     # No out-of-scope heading either — append at end.
     if lines and lines[-1] != "":
@@ -433,8 +433,8 @@ def _first_real_line(text: str) -> str:
             continue
         if s.startswith("#"):
             continue
-        if s.startswith("-") and len(s) <= 3:
-            continue  # empty bullet from template
+        if s == "-":
+            continue  # empty bullet from template (skip the placeholder only)
         return s[:120]
     return ""
 

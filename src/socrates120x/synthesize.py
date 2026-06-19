@@ -138,6 +138,16 @@ def _synthesize_from_markdown(project: Path) -> str:
     )
 
 
+def _oneline(s: str) -> str:
+    """Collapse whitespace/newlines to single spaces.
+
+    The `**Status:**` / `**Next action:**` fields are single inline markdown
+    lines; a multi-line value (state_current is a multiline question) would
+    otherwise break the layout — a blank line inside it ends the block.
+    """
+    return " ".join(s.split())
+
+
 def _format_welcome(
     *,
     name: str,
@@ -166,9 +176,9 @@ _60-second briefing. Generated {today} by `socrates onboard`._
 
 {current_sprint}
 
-**Status:** {status}
+**Status:** {_oneline(status)}
 
-**Next action:** {next_action}
+**Next action:** {_oneline(next_action)}
 
 ## Load-bearing decisions
 
@@ -667,6 +677,16 @@ def _render_md(sections: list[_Section]) -> str:
     return "\n\n".join(filter(None, parts))
 
 
+def _xml_attr(s: str) -> str:
+    """Escape a string for a double-quoted XML/HTML attribute value.
+
+    saxutils.escape only handles ``&``, ``<``, ``>`` — a literal ``"`` (legal
+    in a POSIX path / sprint folder name) would otherwise close the attribute
+    early and malform the document. Escape the quotes too.
+    """
+    return _xml_escape(s, {'"': "&quot;", "'": "&#39;"})
+
+
 def _render_xml(project: Path, sections: list[_Section]) -> str:
     """XML renderer — markdown bodies wrapped in <section> tags.
 
@@ -676,14 +696,14 @@ def _render_xml(project: Path, sections: list[_Section]) -> str:
     """
     today = _dt.date.today().isoformat()
     out: list[str] = [
-        f'<bundle generated="{today}" project="{_xml_escape(project.name)}">'
+        f'<bundle generated="{today}" project="{_xml_attr(project.name)}">'
     ]
     for s in sections:
-        attrs = f' kind="{_xml_escape(s.kind)}"'
+        attrs = f' kind="{_xml_attr(s.kind)}"'
         if s.path:
-            attrs += f' path="{_xml_escape(s.path)}"'
+            attrs += f' path="{_xml_attr(s.path)}"'
         if s.label:
-            attrs += f' label="{_xml_escape(s.label)}"'
+            attrs += f' label="{_xml_attr(s.label)}"'
         # The body contains markdown — escape only the bare minimum so the
         # markdown stays readable. Standard XML chars `<`, `>`, `&` need
         # escaping; markdown's quote/apostrophe usage is irrelevant inside
@@ -737,9 +757,9 @@ def _render_html(project: Path, sections: list[_Section]) -> str:
             tag = "header"
         elif s.kind == "footer":
             tag = "footer"
-        attrs = f' data-kind="{_xml_escape(s.kind)}"'
+        attrs = f' data-kind="{_xml_attr(s.kind)}"'
         if s.path:
-            attrs += f' data-path="{_xml_escape(s.path)}"'
+            attrs += f' data-path="{_xml_attr(s.path)}"'
         label_html = ""
         if s.label:
             label_html = f"  <h1>{_xml_escape(s.label)}</h1>\n"

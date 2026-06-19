@@ -2,9 +2,17 @@ when:
   - event: push
   - event: pull_request
 
+# Mirror the GitHub Actions matrix so the "3.10–3.12 on both CIs" claim in
+# docs/ARCHITECTURE.md holds on Codeberg (the source-of-truth remote) too.
+matrix:
+  PYTHON_VERSION:
+    - "3.10"
+    - "3.11"
+    - "3.12"
+
 steps:
   test:
-    image: python:3.12-slim
+    image: python:${PYTHON_VERSION}-slim
     commands:
       - pip install --upgrade pip
       - pip install -e ".[dev]"

@@ -112,15 +112,21 @@ WEASEL_WORDS = (
 
 # Precompiled whole-phrase matchers. Naive substring search false-positived:
 # "TBD" matched "STBD pin", "as needed" matched "has needed" / "overseas
-# needed", "etc." matched "etcetera". Under --strict a spurious WARNING flips
-# the exit code and breaks CI — exactly the false-positive class the audit
-# promises to avoid. The (?<!\w)/(?!\w) lookarounds require a non-word
-# boundary without consuming an adjacent word char, so phrases ending in
-# punctuation ("etc.") still match before a space or end-of-line. (The
+# needed". Under --strict a spurious WARNING flips the exit code and breaks
+# CI — exactly the false-positive class the audit promises to avoid. (The
 # terminology check got word boundaries in v1.0.0; the weasel check did not.)
+#
+# The boundary guards are applied only at a phrase edge that is itself a word
+# char: a phrase ENDING in punctuation ("etc.") gets no trailing (?!\w), so it
+# still matches "etc.5" / "etc.md", while "TBD" stays guarded against "STBD".
+def _weasel_pattern(w: str) -> re.Pattern[str]:
+    prefix = r"(?<!\w)" if (w[:1].isalnum() or w[:1] == "_") else ""
+    suffix = r"(?!\w)" if (w[-1:].isalnum() or w[-1:] == "_") else ""
+    return re.compile(prefix + re.escape(w) + suffix, re.IGNORECASE)
+
+
 _WEASEL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
-    (w, re.compile(rf"(?<!\w){re.escape(w)}(?!\w)", re.IGNORECASE))
-    for w in WEASEL_WORDS
+    (w, _weasel_pattern(w)) for w in WEASEL_WORDS
 )
 
 ALWAYS_ON_RISK_PHRASES = (

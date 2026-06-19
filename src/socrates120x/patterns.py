@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from socrates120x.interview import Interview
-from socrates120x.support import Question
+from socrates120x.support import Question, _color
 
 # ─────────────────────────────────────────────────────────────────────────────
 # extract — sprint-close interview that captures a reusable pattern
@@ -174,7 +174,7 @@ def render_pattern(answers: dict[str, Any], *, project: Path) -> str:
     war_story = answers.get("pattern_war_story") or "_(not captured)_"
     focus = answers.get("pattern_focus") or ""
 
-    return f"""# Pattern: {answers.get("pattern_slug", "untitled")} (CANDIDATE)
+    return f"""# Pattern: {_sanitize_slug(answers.get("pattern_slug", "untitled"))} (CANDIDATE)
 
 > {summary}
 
@@ -324,6 +324,17 @@ def review_patterns(companyos_root: Path, *, use_cache: bool = True) -> PatternR
                         f"promote it or delete it"
                     ),
                 ))
+        elif is_candidate and extracted is None:
+            # No parseable 'Extracted' date means staleness can't be measured —
+            # don't let an abandoned candidate hide behind a broken date line.
+            findings.append(PatternFinding(
+                kind=FindingKind.STALE,
+                path=pattern,
+                message=(
+                    "candidate has no valid 'Extracted: YYYY-MM-DD' date — add one, "
+                    "or promote/delete it"
+                ),
+            ))
 
         # Orphan source check. Guard on a *non-empty* build set (truthy),
         # not `is not None`: an existing-but-empty builds/ (a freshly
@@ -552,7 +563,12 @@ def format_pattern_report(report: PatternReport, *, use_color: bool | None = Non
         bucket = by_kind[kind]
         if not bucket:
             continue
-        lines.append(f"── {kind.value} ── ({len(bucket)})")
+        kind_color = {
+            FindingKind.ORPHAN: "red",
+            FindingKind.STALE: "yellow",
+            FindingKind.UNUSED: "yellow",
+        }.get(kind, "cyan")
+        lines.append(_color(f"── {kind.value} ── ({len(bucket)})", kind_color, use_color))
         for f in bucket:
             try:
                 rel = f.path.relative_to(report.patterns_dir.parent)
@@ -574,7 +590,10 @@ _PATTERN_EXTRACTED_RE = re.compile(r"\*\*Extracted\*\*\s*\|\s*(\d{4})-(\d{2})-(\
 
 def _extract_source_project(body: str) -> str | None:
     m = _PATTERN_SOURCE_RE.search(body)
-    return m.group(1) if m else None
+    # .strip() to match audit.check_orphan_pattern_source, which strips the
+    # same capture group — otherwise a hand-edited "| ` proj ` |" yields
+    # divergent orphan verdicts between `patterns review` and `audit`.
+    return m.group(1).strip() if m else None
 
 
 def _extract_extracted_date(body: str) -> _dt.date | None:

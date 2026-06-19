@@ -165,6 +165,29 @@ def test_weasel_words_check_fires(clean_project: Path) -> None:
     assert {f.line for f in findings} == {3, 4}
 
 
+def test_weasel_words_no_false_positive_on_substrings(clean_project: Path) -> None:
+    # Word-boundary guards: "TBD" must not match "STBD", "as needed" must not
+    # match "has needed".
+    acc = clean_project / "planning" / "sprints" / "001-discovery-architecture" / "acceptance.md"
+    acc.write_text(
+        "# acceptance\n\n- STBD pin connector is seated\n- has needed review\n",
+        encoding="utf-8",
+    )
+    assert check_acceptance_weasels(clean_project) == []
+
+
+def test_weasel_words_match_etc_before_alnum(clean_project: Path) -> None:
+    # A phrase ending in punctuation ("etc.") carries no trailing word-boundary
+    # guard, so it still matches when glued to a following char ("etc.5").
+    acc = clean_project / "planning" / "sprints" / "001-discovery-architecture" / "acceptance.md"
+    acc.write_text(
+        "# acceptance\n\n- see footnote etc.5 for the edge cases\n",
+        encoding="utf-8",
+    )
+    findings = check_acceptance_weasels(clean_project)
+    assert any("etc." in f.message for f in findings)
+
+
 def test_state_freshness_check_fires_on_old_date(clean_project: Path) -> None:
     state = clean_project / "planning" / "STATE.md"
     old = (_dt.date.today() - _dt.timedelta(days=120)).isoformat()

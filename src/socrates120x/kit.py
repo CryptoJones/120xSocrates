@@ -69,11 +69,24 @@ def scaffold(target: Path, *, overwrite: bool = False) -> list[Path]:
 
     Returns the list of files created (or that already existed).
     Raises FileExistsError if *target* already exists and ``overwrite`` is False.
-    Raises NotADirectoryError if *target* already exists as a regular file —
-    previously the call cascaded into a confusing "Cannot create directory"
-    error from inside the PROJECT_FILES/PROJECT_DIRS loop. Catch it up-front so the operator
-    gets an actionable message before any side effects.
+    Raises NotADirectoryError if *target* already exists as a regular file or a
+    symlink — caught up-front so the operator gets an actionable message before
+    any side effects, instead of a confusing error from inside the loop.
+
+    ``overwrite`` only relaxes the top-level "already exists" guard so the tree
+    can be (re)laid into an existing directory; it does NOT truncate or reset
+    files that are already present — existing files are left as-is and only
+    missing ones are touched. Use ``render_all(..., force=True)`` to overwrite
+    file *content*.
     """
+    # exists() follows symlinks, so a *dangling* symlink reads as "missing"
+    # and would otherwise cascade into a confusing mkdir error; a symlinked
+    # directory would scaffold outside the intended location. Refuse either.
+    if target.is_symlink():
+        raise NotADirectoryError(
+            f"Refusing to scaffold onto a symlink: {target}. "
+            f"Remove it or pass a real directory path."
+        )
     if target.exists() and target.is_file():
         raise NotADirectoryError(
             f"Cannot scaffold into a regular file: {target}. "

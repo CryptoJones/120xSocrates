@@ -236,7 +236,10 @@ class Interview:
                 current_section = q.section
 
             existing = self.answers.get(q.key)
-            if self.resume and existing not in (None, "", []):
+            # Treat any *present* key as answered — including an intentionally
+            # empty optional answer ("" / []). Keying on emptiness re-prompted
+            # those on every --resume, so the operator could never lock one in.
+            if self.resume and q.key in self.answers:
                 output_fn(f"[{i}/{total}] {q.prompt}")
                 show_existing(existing, output_fn)
                 if not confirm_change(input_fn, output_fn):

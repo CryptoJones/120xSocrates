@@ -56,6 +56,30 @@ def test_interview_run_aborts_cleanly_on_exhausted_stdin(tmp_path: Path) -> None
         iv.run(input_fn=_dead_input, output_fn=lambda _s: None)
 
 
+def test_interview_saves_progress_before_eof_abort(tmp_path: Path) -> None:
+    # The fix's whole rationale is "progress is saved, so --resume works".
+    # Feed a couple of answers, THEN exhaust stdin, and assert the collected
+    # answers were persisted before the abort.
+    import json
+
+    answers_path = tmp_path / ".socrates-answers.json"
+    iv = Interview(answers_path=answers_path, project_name="p")
+    feed = iter(["Acme Corp", "A Socratic interviewer"])
+
+    def input_fn(_prompt: str = "") -> str:
+        try:
+            return next(feed)
+        except StopIteration:
+            raise EOFError from None
+
+    with pytest.raises(EOFError):
+        iv.run(input_fn=input_fn, output_fn=lambda _s: None)
+
+    data = json.loads(answers_path.read_text(encoding="utf-8"))
+    assert data["client"] == "Acme Corp"
+    assert data["tagline"] == "A Socratic interviewer"
+
+
 # ---------------------------------------------------------------------------
 # acceptance-weasels: word boundaries, not substrings
 # ---------------------------------------------------------------------------

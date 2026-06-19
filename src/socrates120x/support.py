@@ -66,7 +66,9 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
     Encoding defaults to UTF-8 to match the project-wide
     locale-independence policy.
     """
-    tmp = path.with_name(path.name + ".tmp")
+    # Per-process unique tmp name so two concurrent writers to the same path
+    # don't share one ``<name>.tmp`` and clobber each other before the rename.
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     try:
         tmp.write_text(text, encoding=encoding)
         os.replace(tmp, path)
@@ -260,30 +262,33 @@ def _ask_line(input_fn: InputFn, output_fn: OutputFn, q: Question) -> str:
 
 def _ask_multiline(input_fn: InputFn, output_fn: OutputFn, q: Question) -> str:
     output_fn("   (multi-line — finish with a single '.' on its own line)")
-    lines: list[str] = []
-    eof = False
+    # Loop (not recursion) on the required-but-empty retry: a live stream that
+    # keeps yielding an immediate "." used to recurse to RecursionError.
     while True:
-        prompt = "   …  " if lines else "   ›  "
-        try:
-            line = input_fn(prompt)
-        except EOFError:
-            eof = True
-            break
-        if line.strip() == ".":
-            break
-        lines.append(line)
-    text = "\n".join(lines).rstrip()
-    if not text and q.default:
-        output_fn("   (using default)")
-        return q.default
-    if not text and q.required:
-        if eof:
-            # Dead stream — recursing here used to climb to RecursionError.
-            # Abort cleanly; the caller saves progress and suggests --resume.
-            raise EOFError
-        output_fn("   (this one is required — try again)")
-        return _ask_multiline(input_fn, output_fn, q)
-    return text
+        lines: list[str] = []
+        eof = False
+        while True:
+            prompt = "   …  " if lines else "   ›  "
+            try:
+                line = input_fn(prompt)
+            except EOFError:
+                eof = True
+                break
+            if line.strip() == ".":
+                break
+            lines.append(line)
+        text = "\n".join(lines).rstrip()
+        if not text and q.default:
+            output_fn("   (using default)")
+            return q.default
+        if not text and q.required:
+            if eof:
+                # Dead stream — abort cleanly; the caller saves progress and
+                # suggests --resume.
+                raise EOFError
+            output_fn("   (this one is required — try again)")
+            continue
+        return text
 
 
 def _ask_multiline_editor(
