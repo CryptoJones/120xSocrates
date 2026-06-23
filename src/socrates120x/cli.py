@@ -56,11 +56,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     init.add_argument(
         "project",
-        help="Project slug (e.g. 'quarterly-rebates'). Becomes a folder under --base.",
+        nargs="?", default=None,
+        help="Project slug (e.g. 'quarterly-rebates'). Becomes a folder under "
+             "--base. Omit it to be prompted interactively for the location and "
+             "name of the new folder.",
     )
     init.add_argument(
         "--base", type=Path, default=Path.cwd(),
-        help="Parent directory in which to create the project folder. Default: cwd.",
+        help="Parent directory in which to create the project folder. Default: "
+             "cwd. When the project slug is omitted, this is the default offered "
+             "at the location prompt.",
     )
     init.add_argument(
         "--no-scaffold", action="store_true",
@@ -400,12 +405,64 @@ def _validate_slug(slug: str, *, kind: str = "project") -> str | None:
     return None
 
 
+def _prompt_for_target(default_base: Path) -> tuple[Path, str | None]:
+    """Ask the operator where the new project folder should live and what it
+    should be called.
+
+    Returns ``(base_dir, slug)``. ``slug`` is ``None`` if the operator aborted
+    (Ctrl-C / Ctrl-D), in which case ``base_dir`` is whatever we had so far.
+    The slug is validated here and re-prompted on bad input, so the caller can
+    trust a non-``None`` return is safe to join onto ``base_dir``.
+    """
+    print()
+    print("Let's set up a new 120x project.")
+    try:
+        base_raw = input(
+            f"  Where should the project folder be created? "
+            f"[default: {default_base}] "
+        ).strip()
+    except (EOFError, KeyboardInterrupt):
+        return default_base, None
+    base = Path(base_raw).expanduser() if base_raw else default_base
+
+    while True:
+        try:
+            slug = input("  What should the new project folder be called? ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return base, None
+        if not slug:
+            print("  (a folder name is required)")
+            continue
+        err = _validate_slug(slug, kind="project")
+        if err:
+            print(f"  {err}")
+            continue
+        return base, slug
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
-    slug_err = _validate_slug(args.project, kind="project")
+    project: str | None = args.project
+    base: Path = args.base
+    if project is None:
+        # No slug on the command line — ask the operator where to create the
+        # folder and what to name it. Requires a TTY (same as the interview).
+        if not is_interactive():
+            print(
+                "error: init needs a project slug argument, or an interactive "
+                "terminal to prompt for the folder location and name.",
+                file=sys.stderr,
+            )
+            return 2
+        base, project = _prompt_for_target(args.base)
+        if project is None:
+            print("\nNo folder name given — nothing created.", file=sys.stderr)
+            return 130
+
+    slug_err = _validate_slug(project, kind="project")
     if slug_err:
         print(f"error: {slug_err}", file=sys.stderr)
         return 2
-    target: Path = args.base.expanduser().resolve() / args.project
+    target: Path = base.expanduser().resolve() / project
 
     if not args.no_scaffold:
         if target.exists():

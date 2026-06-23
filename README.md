@@ -54,6 +54,9 @@ socrates companyos ~/Documents/120x
 cd ~/Documents/120x/builds
 socrates init quarterly-rebates
 
+# …or omit the slug and let socrates ask where to put the folder and what to name it
+socrates init
+
 # every working day, log what happened
 cd quarterly-rebates
 socrates journal
@@ -78,7 +81,7 @@ each one operates on a 120x folder produced by `socrates init` or
 
 | Subcommand | One-liner |
 |---|---|
-| `socrates init <slug>` | scaffold a project and interview the operator |
+| `socrates init [slug]` | scaffold a project and interview the operator (omit the slug to be prompted for the folder location and name) |
 | `socrates audit [path]` | verify planning files for internal consistency |
 | `socrates onboard [path]` | produce a 60-second WELCOME.md from existing planning files |
 | `socrates journal [path]` | open today's `planning/journal/YYYY-MM-DD.md` entry |
@@ -97,13 +100,20 @@ each one operates on a 120x folder produced by `socrates init` or
 | `socrates patterns review [path]` | scan `patterns/` for stale candidates, orphans, and unused entries |
 | `socrates audit --companyos [path]` | macro-level audit (orphan builds/clients/patterns, stale proposals) |
 
-### `socrates init <slug>` — interview a new project
+### `socrates init [slug]` — interview a new project
 
 Scaffolds the 120x folder tree and walks the operator through the Socratic interview, then writes the planning files.
 
+If you omit the slug, socrates asks two questions up front — **where** the new folder should be created (defaulting to `--base`, i.e. cwd) and **what** it should be called — then proceeds exactly as if you had passed them. The folder name is validated as you type, so a bad name re-prompts instead of failing the whole run:
+
+```bash
+socrates init                  # prompt for location + name, then interview
+socrates init quarterly-rebates    # name given up front
+```
+
 | Flag | Effect |
 |---|---|
-| `--base PATH` | parent dir for the project folder (default: cwd) |
+| `--base PATH` | parent dir for the project folder (default: cwd; also the default offered at the location prompt) |
 | `--no-scaffold` | skip the scaffold step (folder must exist) |
 | `--resume` | resume a partially-completed interview |
 | `--no-render` | save answers but skip writing the `.md` files |

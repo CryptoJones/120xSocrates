@@ -4,6 +4,11 @@ All notable changes to 120xSocrates. Format follows [Keep a Changelog](https://k
 versions follow [SemVer](https://semver.org/). The version in `pyproject.toml` is the single
 source of truth — the README badge reads it directly, and each release is tagged `vX.Y.Z`.
 
+## [Unreleased]
+
+### Added
+- `init`: the project slug is now optional. Run `socrates init` with no slug and it prompts for **where** the new folder should be created (defaulting to `--base`/cwd) and **what** it should be called, then proceeds with the interview as usual. The folder name is validated as you type, so a bad name re-prompts instead of aborting the run. Passing the slug on the command line behaves exactly as before; generated kit output is unchanged.
+
 ## [1.0.1] — 2026-06-16
 
 Two correctness fixes the v1.0.0 review wave missed: both are in the same

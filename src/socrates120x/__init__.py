@@ -45,7 +45,7 @@ from socrates120x.audit import (
     looks_like_companyos,
     run_audit,
 )
-from socrates120x.cli import _validate_slug, main
+from socrates120x.cli import _prompt_for_target, _validate_slug, main
 from socrates120x.interview import QUESTIONS, Interview
 from socrates120x.kit import (
     COMPANYOS_DIRS,
@@ -109,7 +109,7 @@ __all__ = [
     "PackFormat", "PatternFinding", "PatternReport", "ProjectStatus",
     "QUESTIONS", "Question", "SUPPORTED_FORMATS", "Severity", "ShipFinding",
     "TimelineEvent", "_resolve_patterns_dir", "_sanitize_slug", "_top_bullets",
-    "_validate_slug", "ask", "atomic_write_text", "build_pack",
+    "_prompt_for_target", "_validate_slug", "ask", "atomic_write_text", "build_pack",
     "build_timeline", "check_acceptance_weasels", "check_adapter_routing",
     "check_always_on_risks", "check_companyos_structure", "check_orphan_builds",
     "check_orphan_pattern_source", "check_required_files",
